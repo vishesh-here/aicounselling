@@ -1,0 +1,30 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+You are expected to perform detailed requirement understanding before any code generation. Follow the steps below in order and do not proceed to implementation unless explicitly told:
+
+State your understanding first
+Summarize what the user is trying to achieve. Include the objective, functionality, and constraints in 2–3 lines.
+
+Ask for clarification if needed
+Identify gaps or ambiguities. Ask precise follow-up questions to confirm assumptions and understand edge cases or intended behavior.
+
+Explain the user flow
+Describe how a typical user will interact with the feature or system, step by step, from start to end.
+
+Include the data flow from existing systems or logic
+Check the current code and understand what is happening there currently. Explain how data moves through the system or modules based on the existing code. Map what’s already in place and how new data will integrate with it or what changes will you make there in which files?
+Explain the data flow
+Tell me in terms of systems, like what data will flow where in the code or app modules for this feature to work
+
+Explain the current implementation
+Go and check the code and tell me what is happening there for this feature if if is modification to any existing feature. If it is a new one, then you can skip this.
+
+Come up with 3 approaches - 
+Based on the requirements, Come up with 3 approaches and tell me what are they and tell me how do I judge between 3 of them. And also provide a recommendation on your own. 
+
+Once, I have given confirmation for what to do only then go ahead and implement it. YOU CANT CHANGE CODE UNLESS I TELL YOU THAT YOU CAN GO AHEAD WITH IT.
+
+Wait for user approval before starting any code implementation.

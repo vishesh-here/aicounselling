@@ -1,0 +1,425 @@
+generator client {
+    provider = "prisma-client-js"
+    binaryTargets = ["native", "linux-musl-arm64-openssl-3.0.x"]
+    output = "/home/ubuntu/counseling_platform/app/node_modules/.prisma/client"
+}
+
+datasource db {
+    provider = "postgresql"
+    url      = env("DATABASE_URL")
+}
+
+model User {
+  id                    String                 @id @default(cuid())
+  email                 String                 @unique
+  name                  String
+  password              String
+  role                  UserRole               @default(VOLUNTEER)
+  state                 String?
+  phone                 String?
+  specialization        String?
+  isActive              Boolean                @default(true)
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+  approvalStatus        ApprovalStatus         @default(PENDING)
+  approvedAt            DateTime?
+  approvedBy            String?
+  experience            String?
+  motivation            String?
+  rejectionReason       String?
+  assignments           Assignment[]
+  chatMessages          ChatMessage[]
+  culturalStories       CulturalStory[]
+  knowledgeBase         KnowledgeBase[]
+  sessions              Session[]
+  aiChatConversations   AiChatConversation[]
+  conversationMemories  ConversationMemory[]
+  approver              User?                  @relation("UserApprovals", fields: [approvedBy], references: [id])
+  approvedUsers         User[]                 @relation("UserApprovals")
+
+  @@map("users")
+}
+
+model Child {
+  id                   String                 @id @default(cuid())
+  name                 String
+  age                  Int
+  gender               Gender
+  state                String
+  district             String?
+  background           String?
+  schoolLevel          String?
+  interests            String[]
+  challenges           String[]
+  language             String                 @default("Hindi")
+  profileImage         String?
+  isActive             Boolean                @default(true)
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+  assignments          Assignment[]
+  concerns             Concern[]
+  sessions             Session[]
+  aiChatConversations  AiChatConversation[]
+  conversationMemories ConversationMemory[]
+  tags                 Tag[]                  @relation("ChildTags")
+
+  @@map("children")
+}
+
+model Assignment {
+  id          String   @id @default(cuid())
+  volunteerId String
+  childId     String
+  assignedAt  DateTime @default(now())
+  isActive    Boolean  @default(true)
+  notes       String?
+  child       Child    @relation(fields: [childId], references: [id], onDelete: Cascade)
+  volunteer   User     @relation(fields: [volunteerId], references: [id], onDelete: Cascade)
+
+  @@unique([volunteerId, childId])
+  @@map("assignments")
+}
+
+model Session {
+  id                   String                 @id @default(cuid())
+  childId              String
+  volunteerId          String
+  scheduledAt          DateTime?
+  startedAt            DateTime?
+  endedAt              DateTime?
+  status               SessionStatus          @default(PLANNED)
+  sessionType          SessionType            @default(COUNSELING)
+  notes                String?
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+  chatMessages         ChatMessage[]
+  aiChatConversations  AiChatConversation[]
+  conversationMemories ConversationMemory[]
+  summary              SessionSummary?
+  child                Child                  @relation(fields: [childId], references: [id], onDelete: Cascade)
+  volunteer            User                   @relation(fields: [volunteerId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model SessionSummary {
+  id                  String           @id @default(cuid())
+  sessionId           String           @unique
+  
+  // Basic session info
+  summary             String
+  sessionDuration     String?
+  sessionType         String?
+  
+  // Mood and state
+  initialMood         String?
+  finalMood           String?
+  moodChanges         String?
+  
+  // Content and topics
+  concernsDiscussed   String[]
+  topicsDiscussed     String[]
+  
+  // Techniques and cultural elements
+  culturalStoriesUsed String[]
+  techniquesUsed      String[]
+  techniqueEffectiveness Json?
+  storyResponse       String?
+  
+  // Insights and breakthroughs
+  breakthroughs       String?
+  keyInsights         String?
+  
+  // Challenges and engagement
+  challengesFaced     String?
+  challengeHandling   String?
+  engagementLevel     String?
+  participationNotes  String?
+  
+  // Progress and next steps
+  progressMade        String?
+  nextSteps           String[]
+  actionItems         String[]
+  recommendations     String?
+  
+  // Assessment and planning
+  sessionEffectiveness String?
+  volunteerConfidence String?
+  nextSessionFocus    String?
+  nextSessionTiming   String?
+  
+  // Additional information
+  additionalNotes     String?
+  
+  // Legacy fields
+  resolutionStatus    ResolutionStatus @default(IN_PROGRESS)
+  followUpNeeded      Boolean          @default(false)
+  followUpDate        DateTime?
+  
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+  session             Session          @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@map("session_summaries")
+}
+
+model KnowledgeBase {
+  id            String            @id @default(cuid())
+  title         String
+  content       String
+  summary       String?
+  category      KnowledgeCategory
+  subCategory   String?
+  fileType      String?
+  fileUrl       String?
+  isActive      Boolean           @default(true)
+  createdById   String
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  downloadCount Int               @default(0)
+  embeddings    Json?
+  fileSize      Int?
+  isProcessed   Boolean           @default(false)
+  views         Int               @default(0)
+  chunks        DocumentChunk[]
+  createdBy     User              @relation(fields: [createdById], references: [id])
+  tags          Tag[]             @relation("KnowledgeBaseTags")
+
+  @@map("knowledge_base")
+}
+
+model DocumentChunk {
+  id              String        @id @default(cuid())
+  knowledgeBaseId String
+  content         String
+  chunkIndex      Int
+  embeddings      Json?
+  metadata        Json?
+  createdAt       DateTime      @default(now())
+  knowledgeBase   KnowledgeBase @relation(fields: [knowledgeBaseId], references: [id], onDelete: Cascade)
+
+  @@map("document_chunks")
+}
+
+model CulturalStory {
+  id            String      @id @default(cuid())
+  title         String
+  source        StorySource
+  summary       String
+  fullStory     String
+  themes        String[]
+  applicableFor String[]
+  moralLessons  String[]
+  tags          String[]
+  isActive      Boolean     @default(true)
+  createdById   String
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  createdBy     User        @relation(fields: [createdById], references: [id])
+
+  @@map("cultural_stories")
+}
+
+model Concern {
+  id           String          @id @default(cuid())
+  childId      String
+  title        String
+  description  String
+  category     ConcernCategory
+  severity     Severity        @default(MEDIUM)
+  status       ConcernStatus   @default(OPEN)
+  identifiedAt DateTime        @default(now())
+  resolvedAt   DateTime?
+  resolution   String?
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  child        Child           @relation(fields: [childId], references: [id], onDelete: Cascade)
+
+  @@map("concerns")
+}
+
+model ChatMessage {
+  id          String   @id @default(cuid())
+  sessionId   String?
+  userId      String
+  message     String
+  response    String?
+  context     String?
+  isSystemMsg Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  session     Session? @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("chat_messages")
+}
+
+model AiChatConversation {
+  id               String               @id @default(cuid())
+  sessionId        String
+  childId          String
+  volunteerId      String
+  conversationName String?
+  context          Json?                // Stores comprehensive RAG context
+  isActive         Boolean              @default(true)
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+  session          Session              @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  child            Child                @relation(fields: [childId], references: [id], onDelete: Cascade)
+  volunteer        User                 @relation(fields: [volunteerId], references: [id], onDelete: Cascade)
+  messages         AiChatMessage[]
+  
+  @@map("ai_chat_conversations")
+}
+
+model AiChatMessage {
+  id             String               @id @default(cuid())
+  conversationId String
+  role           AiChatRole
+  content        String
+  ragContext     Json?                // Stores RAG context used for this message
+  timestamp      DateTime             @default(now())
+  metadata       Json?                // Additional metadata like response time, tokens used, etc.
+  conversation   AiChatConversation   @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  
+  @@map("ai_chat_messages")
+}
+
+model ConversationMemory {
+  id              String    @id @default(cuid())
+  childId         String
+  volunteerId     String
+  sessionId       String?
+  memoryType      MemoryType
+  content         String
+  importance      Int       @default(1) // 1-5 scale for memory importance
+  associatedTags  String[]
+  expiresAt       DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  child           Child     @relation(fields: [childId], references: [id], onDelete: Cascade)
+  volunteer       User      @relation(fields: [volunteerId], references: [id], onDelete: Cascade)
+  session         Session?  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  
+  @@map("conversation_memory")
+}
+
+model Tag {
+  id            String          @id @default(cuid())
+  name          String          @unique
+  category      TagCategory
+  description   String?
+  color         String?
+  createdAt     DateTime        @default(now())
+  children      Child[]         @relation("ChildTags")
+  knowledgeBase KnowledgeBase[] @relation("KnowledgeBaseTags")
+
+  @@map("tags")
+}
+
+enum UserRole {
+  ADMIN
+  VOLUNTEER
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum SessionStatus {
+  PLANNED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum SessionType {
+  COUNSELING
+  CAREER_GUIDANCE
+  PSYCHOLOGICAL_SUPPORT
+  FOLLOW_UP
+}
+
+enum ResolutionStatus {
+  RESOLVED
+  IN_PROGRESS
+  PENDING
+  ESCALATED
+}
+
+enum KnowledgeCategory {
+  CAREER_GUIDANCE
+  PSYCHOLOGICAL_COUNSELING
+  CULTURAL_WISDOM
+  EDUCATIONAL_RESOURCES
+  LIFE_SKILLS
+}
+
+enum StorySource {
+  RAMAYANA
+  MAHABHARATA
+  BHAGAVAD_GITA
+  PANCHTANTRA
+  JATAKA_TALES
+  HITOPADESHA
+  TENALI_RAMA
+  AKBAR_BIRBAL
+  OTHER
+}
+
+enum ConcernCategory {
+  ACADEMIC
+  FAMILY
+  EMOTIONAL
+  BEHAVIORAL
+  CAREER
+  SOCIAL
+  HEALTH
+  FINANCIAL
+}
+
+enum Severity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum ConcernStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+enum TagCategory {
+  SKILL
+  INTEREST
+  ISSUE
+  DEMOGRAPHIC
+  EDUCATIONAL
+}
+
+enum AiChatRole {
+  USER
+  ASSISTANT
+  SYSTEM
+}
+
+enum MemoryType {
+  IMPORTANT_INSIGHT
+  CHILD_PREFERENCE
+  EFFECTIVE_TECHNIQUE
+  WARNING_SIGN
+  BREAKTHROUGH_MOMENT
+  CULTURAL_REFERENCE
+  FAMILY_CONTEXT
+  BEHAVIORAL_PATTERN
+}

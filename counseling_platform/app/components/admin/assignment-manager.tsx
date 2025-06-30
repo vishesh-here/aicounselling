@@ -1,0 +1,385 @@
+
+"use client";
+
+import { useState } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { 
+  User, Users, UserPlus, Search, Filter, 
+  MapPin, AlertCircle, CheckCircle, X
+} from "lucide-react";
+import { toast } from "sonner";
+
+interface AssignmentManagerProps {
+  children: any[];
+  volunteers: any[];
+  assignments: any[];
+}
+
+export function AssignmentManager({ children, volunteers, assignments }: AssignmentManagerProps) {
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedState, setSelectedState] = useState("all");
+  const [assignmentFilter, setAssignmentFilter] = useState("all");
+  const [isAssigning, setIsAssigning] = useState(false);
+  const [selectedChild, setSelectedChild] = useState<any>(null);
+
+  // Filter children based on search and filters
+  const filteredChildren = children.filter(child => {
+    const matchesSearch = child.name.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesState = selectedState === "all" || child.state === selectedState;
+    const matchesAssignment = 
+      assignmentFilter === "all" ||
+      (assignmentFilter === "assigned" && child.assignments.length > 0) ||
+      (assignmentFilter === "unassigned" && child.assignments.length === 0);
+
+    return matchesSearch && matchesState && matchesAssignment;
+  });
+
+  // Get unique states for filter
+  const uniqueStates = [...new Set(children.map(child => child.state))].sort();
+
+  // Assign volunteer to child
+  const assignVolunteer = async (childId: string, volunteerId: string) => {
+    setIsAssigning(true);
+    try {
+      const response = await fetch("/api/admin/assignments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "assign",
+          childId,
+          volunteerId
+        })
+      });
+
+      if (response.ok) {
+        toast.success("Assignment created successfully!");
+        window.location.reload();
+      } else {
+        const error = await response.json();
+        toast.error(error.message || "Failed to create assignment");
+      }
+    } catch (error) {
+      console.error("Assignment error:", error);
+      toast.error("Failed to create assignment");
+    } finally {
+      setIsAssigning(false);
+    }
+  };
+
+  // Remove assignment
+  const removeAssignment = async (assignmentId: string) => {
+    try {
+      const response = await fetch("/api/admin/assignments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "remove",
+          assignmentId
+        })
+      });
+
+      if (response.ok) {
+        toast.success("Assignment removed successfully!");
+        window.location.reload();
+      } else {
+        const error = await response.json();
+        toast.error(error.message || "Failed to remove assignment");
+      }
+    } catch (error) {
+      console.error("Remove assignment error:", error);
+      toast.error("Failed to remove assignment");
+    }
+  };
+
+  // Bulk assign volunteers based on state matching
+  const bulkAssignByState = async () => {
+    const unassignedChildren = children.filter(child => child.assignments.length === 0);
+    const assignmentPromises = unassignedChildren.map(child => {
+      const matchingVolunteer = volunteers.find(volunteer => 
+        volunteer.state === child.state && 
+        !assignments.some(assignment => assignment.volunteerId === volunteer.id && assignment.isActive)
+      );
+
+      if (matchingVolunteer) {
+        return assignVolunteer(child.id, matchingVolunteer.id);
+      }
+      return Promise.resolve();
+    });
+
+    try {
+      await Promise.all(assignmentPromises);
+      toast.success("Bulk assignment completed!");
+    } catch (error) {
+      toast.error("Some assignments failed");
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Filters and Search */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Filter className="h-5 w-5" />
+            Filters & Search
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="relative">
+              <Search className="h-4 w-4 absolute left-3 top-3 text-gray-400" />
+              <Input
+                placeholder="Search children..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+            <Select value={selectedState} onValueChange={setSelectedState}>
+              <SelectTrigger>
+                <SelectValue placeholder="Filter by state" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All States</SelectItem>
+                {uniqueStates.map((state) => (
+                  <SelectItem key={state} value={state}>
+                    {state}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={assignmentFilter} onValueChange={setAssignmentFilter}>
+              <SelectTrigger>
+                <SelectValue placeholder="Assignment status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Children</SelectItem>
+                <SelectItem value="assigned">Assigned Only</SelectItem>
+                <SelectItem value="unassigned">Unassigned Only</SelectItem>
+              </SelectContent>
+            </Select>
+            <Button onClick={bulkAssignByState} variant="outline">
+              <Users className="h-4 w-4 mr-2" />
+              Bulk Assign by State
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Tabs defaultValue="children" className="space-y-6">
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="children" className="flex items-center gap-2">
+            <User className="h-4 w-4" />
+            Children Management
+          </TabsTrigger>
+          <TabsTrigger value="assignments" className="flex items-center gap-2">
+            <Users className="h-4 w-4" />
+            Current Assignments
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="children">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {filteredChildren.map((child) => (
+              <Card key={child.id} className="relative">
+                <CardHeader className="pb-3">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <CardTitle className="text-lg">{child.name}</CardTitle>
+                      <p className="text-sm text-gray-600">
+                        {child.age} years old • {child.state}
+                      </p>
+                    </div>
+                    {child.assignments.length > 0 ? (
+                      <Badge className="bg-green-100 text-green-800">
+                        <CheckCircle className="h-3 w-3 mr-1" />
+                        Assigned
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="text-red-600 border-red-300">
+                        <AlertCircle className="h-3 w-3 mr-1" />
+                        Unassigned
+                      </Badge>
+                    )}
+                  </div>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  {child.assignments.length > 0 ? (
+                    <div className="space-y-2">
+                      {child.assignments.map((assignment: any) => (
+                        <div key={assignment.id} className="p-2 bg-gray-50 rounded border">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="font-medium text-sm">{assignment.volunteer.name}</p>
+                              <p className="text-xs text-gray-600">{assignment.volunteer.email}</p>
+                              {assignment.volunteer.specialization && (
+                                <Badge variant="secondary" className="text-xs mt-1">
+                                  {assignment.volunteer.specialization}
+                                </Badge>
+                              )}
+                            </div>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => removeAssignment(assignment.id)}
+                              className="text-red-600 hover:text-red-700"
+                            >
+                              <X className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <p className="text-sm text-gray-600">No assigned volunteer</p>
+                      {child.concerns.length > 0 && (
+                        <div>
+                          <p className="text-xs font-medium text-orange-600 mb-1">
+                            Active Concerns: {child.concerns.length}
+                          </p>
+                          <div className="flex flex-wrap gap-1">
+                            {child.concerns.slice(0, 2).map((concern: any) => (
+                              <Badge key={concern.id} variant="outline" className="text-xs">
+                                {concern.category}
+                              </Badge>
+                            ))}
+                            {child.concerns.length > 2 && (
+                              <Badge variant="outline" className="text-xs">
+                                +{child.concerns.length - 2} more
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                      <Dialog>
+                        <DialogTrigger asChild>
+                          <Button 
+                            size="sm" 
+                            className="w-full bg-blue-600 hover:bg-blue-700"
+                            onClick={() => setSelectedChild(child)}
+                          >
+                            <UserPlus className="h-3 w-3 mr-1" />
+                            Assign Volunteer
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent>
+                          <DialogHeader>
+                            <DialogTitle>Assign Volunteer to {child.name}</DialogTitle>
+                          </DialogHeader>
+                          <div className="space-y-4">
+                            <div className="p-3 bg-gray-50 rounded">
+                              <p className="font-medium">{child.name}</p>
+                              <p className="text-sm text-gray-600">{child.age} years old • {child.state}</p>
+                              {child.concerns.length > 0 && (
+                                <p className="text-sm text-orange-600 mt-1">
+                                  {child.concerns.length} active concern(s)
+                                </p>
+                              )}
+                            </div>
+                            <div className="space-y-2 max-h-60 overflow-y-auto">
+                              {volunteers.map((volunteer) => (
+                                <div key={volunteer.id} className="p-3 border rounded hover:bg-gray-50">
+                                  <div className="flex items-center justify-between">
+                                    <div>
+                                      <p className="font-medium">{volunteer.name}</p>
+                                      <p className="text-sm text-gray-600">{volunteer.email}</p>
+                                      <div className="flex items-center gap-2 mt-1">
+                                        <span className="text-xs text-gray-500">
+                                          <MapPin className="h-3 w-3 inline mr-1" />
+                                          {volunteer.state}
+                                        </span>
+                                        {volunteer.specialization && (
+                                          <Badge variant="secondary" className="text-xs">
+                                            {volunteer.specialization}
+                                          </Badge>
+                                        )}
+                                      </div>
+                                    </div>
+                                    <Button
+                                      size="sm"
+                                      onClick={() => assignVolunteer(child.id, volunteer.id)}
+                                      disabled={isAssigning}
+                                    >
+                                      Assign
+                                    </Button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </DialogContent>
+                      </Dialog>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </TabsContent>
+
+        <TabsContent value="assignments">
+          <Card>
+            <CardHeader>
+              <CardTitle>Current Assignments Overview</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {assignments.map((assignment) => (
+                  <div key={assignment.id} className="p-4 border rounded-lg">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-4">
+                        <div>
+                          <p className="font-medium">{assignment.child.name}</p>
+                          <p className="text-sm text-gray-600">
+                            {assignment.child.age} years old • {assignment.child.state}
+                          </p>
+                        </div>
+                        <div className="text-gray-400">→</div>
+                        <div>
+                          <p className="font-medium">{assignment.volunteer.name}</p>
+                          <p className="text-sm text-gray-600">{assignment.volunteer.email}</p>
+                          {assignment.volunteer.specialization && (
+                            <Badge variant="secondary" className="text-xs mt-1">
+                              {assignment.volunteer.specialization}
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <Badge variant="outline">
+                          {new Date(assignment.assignedAt).toLocaleDateString()}
+                        </Badge>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => removeAssignment(assignment.id)}
+                          className="text-red-600 hover:text-red-700"
+                        >
+                          <X className="h-3 w-3 mr-1" />
+                          Remove
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                {assignments.length === 0 && (
+                  <div className="text-center py-8 text-gray-500">
+                    <Users className="h-8 w-8 mx-auto mb-2 text-gray-400" />
+                    <p>No active assignments found</p>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}
