@@ -1,8 +1,6 @@
-
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useSession } from 'next-auth/react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -40,7 +38,6 @@ interface ActionDialogState {
 }
 
 export default function UserApprovalsPage() {
-  const { data: session } = useSession();
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionDialog, setActionDialog] = useState<ActionDialogState>({
@@ -145,19 +142,6 @@ export default function UserApprovalsPage() {
   const pendingUsers = users.filter(u => u.approvalStatus === 'PENDING');
   const approvedUsers = users.filter(u => u.approvalStatus === 'APPROVED');
   const rejectedUsers = users.filter(u => u.approvalStatus === 'REJECTED');
-
-  if (session?.user?.role !== 'ADMIN') {
-    return (
-      <div className="p-6">
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>
-            You don't have permission to access this page.
-          </AlertDescription>
-        </Alert>
-      </div>
-    );
-  }
 
   if (loading) {
     return (

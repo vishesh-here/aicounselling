@@ -6,7 +6,6 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.Sidebar = void 0;
 const react_1 = require("react");
-const react_2 = require("next-auth/react");
 const link_1 = __importDefault(require("next/link"));
 const navigation_1 = require("next/navigation");
 const utils_1 = require("@/lib/utils");
@@ -55,11 +54,10 @@ const adminNavigation = [
 function Sidebar({ className }) {
     var _a, _b, _c, _d, _e, _f;
     const [collapsed, setCollapsed] = (0, react_1.useState)(false);
-    const { data: session } = (0, react_2.useSession)();
     const pathname = (0, navigation_1.usePathname)();
     const isAdmin = ((_a = session === null || session === void 0 ? void 0 : session.user) === null || _a === void 0 ? void 0 : _a.role) === "ADMIN";
     const handleSignOut = () => {
-        (0, react_2.signOut)({ callbackUrl: "/login" });
+        // (0, react_2.signOut)({ callbackUrl: "/login" });
     };
     return (<div className={(0, utils_1.cn)("flex h-screen flex-col bg-slate-900 text-white transition-all duration-300", collapsed ? "w-16" : "w-64", className)}>
       {/* Header */}

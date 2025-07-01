@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState } from 'react';
@@ -11,6 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AlertCircle, CheckCircle, Loader2 } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { supabase } from "@/lib/supabaseClient";
 
 const INDIAN_STATES = [
   "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh", "Goa", "Gujarat",
@@ -127,50 +127,69 @@ export default function SignupPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
     if (!validateForm()) {
       return;
     }
-
     setIsLoading(true);
     setSubmitStatus('idle');
-
     try {
-      const response = await fetch('/api/auth/signup', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          name: formData.name.trim(),
-          email: formData.email.trim().toLowerCase(),
-          password: formData.password,
-          phone: formData.phone.trim(),
-          state: formData.state,
-          specialization: formData.specialization,
-          experience: formData.experience.trim(),
-          motivation: formData.motivation.trim()
-        })
+      const { data, error: supabaseError } = await supabase.auth.signUp({
+        email: formData.email.trim().toLowerCase(),
+        password: formData.password,
+        options: {
+          data: {
+            name: formData.name.trim(),
+            phone: formData.phone.trim(),
+            state: formData.state,
+            specialization: formData.specialization,
+            experience: formData.experience.trim(),
+            motivation: formData.motivation.trim(),
+          }
+        }
       });
-
-      const result = await response.json();
-
-      if (response.ok) {
+      if (supabaseError) {
+        setSubmitStatus('error');
+        setErrors({ email: supabaseError.message });
+      } else {
         setSubmitStatus('success');
         setTimeout(() => {
           router.push('/login?message=signup-success');
         }, 3000);
-      } else {
-        setSubmitStatus('error');
-        if (result.errors) {
-          setErrors(result.errors);
-        }
       }
     } catch (error) {
       console.error('Signup error:', error);
       setSubmitStatus('error');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // Demo credentials autofill
+  const fillDemoCredentials = (role: 'admin' | 'volunteer') => {
+    if (role === 'admin') {
+      setFormData({
+        name: 'Admin User',
+        email: 'admin@demo.com',
+        password: 'admin1234',
+        confirmPassword: 'admin1234',
+        phone: '+911234567890',
+        state: 'Delhi',
+        specialization: 'Child Psychology',
+        experience: '10 years in child psychology and counseling.',
+        motivation: 'Passionate about helping children and making a difference.'
+      });
+    } else {
+      setFormData({
+        name: 'Volunteer User',
+        email: 'volunteer@demo.com',
+        password: 'volunteer1234',
+        confirmPassword: 'volunteer1234',
+        phone: '+919876543210',
+        state: 'Maharashtra',
+        specialization: 'Career Guidance',
+        experience: '5 years guiding students in career choices.',
+        motivation: 'Want to support students in finding their path.'
+      });
     }
   };
 
@@ -389,6 +408,33 @@ export default function SignupPage() {
                     Sign in here
                   </button>
                 </p>
+              </div>
+
+              {/* Demo Credentials */}
+              <div className="mt-6 pt-6 border-t border-gray-200">
+                <p className="text-sm text-gray-600 mb-3 text-center">
+                  Demo Accounts:
+                </p>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="flex-1"
+                    onClick={() => fillDemoCredentials('admin')}
+                  >
+                    Admin Demo
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="flex-1"
+                    onClick={() => fillDemoCredentials('volunteer')}
+                  >
+                    Volunteer Demo
+                  </Button>
+                </div>
               </div>
             </form>
           </CardContent>

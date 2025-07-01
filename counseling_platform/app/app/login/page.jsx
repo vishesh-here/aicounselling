@@ -11,7 +11,6 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const react_1 = require("react");
-const react_2 = require("next-auth/react");
 const navigation_1 = require("next/navigation");
 const button_1 = require("@/components/ui/button");
 const input_1 = require("@/components/ui/input");

@@ -1,158 +1,79 @@
-
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth-config";
-import { prisma } from "@/lib/db";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Textarea } from "@/components/ui/textarea";
-import { 
-  User, Clock, MessageCircle, BookOpen, Brain, 
-  PlayCircle, StopCircle, CheckCircle, AlertTriangle
-} from "lucide-react";
+import { useEffect, useState } from "react";
+import { useRouter, useParams } from "next/navigation";
+import { supabase } from "@/lib/supabaseClient";
+import { Card, CardContent } from "@/components/ui/card";
+import { AlertTriangle } from "lucide-react";
 import Link from "next/link";
+import { Button } from "@/components/ui/button";
 import { SessionInterface } from "@/components/session/session-interface";
 
-export const dynamic = "force-dynamic";
+export default function SessionPage() {
+  const router = useRouter();
+  const params = useParams();
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [sessionData, setSessionData] = useState<any>(null);
+  const [childData, setChildData] = useState<any>(null);
+  const [userRole, setUserRole] = useState<string>("VOLUNTEER");
+  const [userId, setUserId] = useState<string>("");
 
-async function getSessionData(childId: string, userRole: string, userId: string) {
-  // Check if there's an active session for this child
-  let activeSession = await prisma.session.findFirst({
-    where: {
-      childId: childId,
-      status: { in: ["PLANNED", "IN_PROGRESS"] }
-    },
-    include: {
-      child: {
-        include: {
-          concerns: {
-            where: { status: { not: "RESOLVED" } }
-          },
-          assignments: {
-            include: {
-              volunteer: {
-                select: { id: true, name: true, email: true }
-              }
-            }
-          }
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        // Get session
+        const { data: sessionObj, error: sessionError } = await supabase.auth.getSession();
+        if (sessionError || !sessionObj.session) throw sessionError || new Error("No session");
+        const user = sessionObj.session.user;
+        setUserRole(user.user_metadata?.role || "VOLUNTEER");
+        setUserId(user.id);
+        // Get childId from params
+        const childId = params?.id as string;
+        // Fetch child data
+        const { data: child, error: childError } = await supabase
+          .from("child")
+          .select("*, assignments(*), concerns(*), isActive")
+          .eq("id", childId)
+          .maybeSingle();
+        if (childError || !child) throw childError || new Error("Child not found");
+        setChildData(child);
+        // Access control for volunteers
+        if (user.user_metadata?.role === "VOLUNTEER") {
+          const hasAccess = (child.assignments || []).some(
+            (assignment: any) => assignment.volunteerId === user.id && assignment.isActive
+          );
+          if (!hasAccess) throw new Error("Access denied");
         }
-      },
-      volunteer: {
-        select: { name: true, email: true }
-      },
-      summary: true,
-      chatMessages: {
-        orderBy: { createdAt: "asc" }
+        // Fetch active session for this child
+        const { data: activeSession, error: sessionFetchError } = await supabase
+          .from("session")
+          .select("*")
+          .eq("childId", childId)
+          .in("status", ["PLANNED", "IN_PROGRESS"])
+          .maybeSingle();
+        if (sessionFetchError) throw sessionFetchError;
+        setSessionData(activeSession);
+      } catch (err: any) {
+        setError(err.message || "Failed to load session");
+      } finally {
+        setLoading(false);
       }
-    }
-  });
+    };
+    fetchData();
+  }, [params]);
 
-  // Get child data for access control
-  const child = await prisma.child.findUnique({
-    where: { id: childId, isActive: true },
-    include: {
-      assignments: {
-        include: {
-          volunteer: {
-            select: { id: true, name: true, email: true }
-          }
-        }
-      }
-    }
-  });
-
-  if (!child) {
-    throw new Error("Child not found");
+  if (loading) {
+    return <div className="p-6">Loading session...</div>;
   }
-
-  // Check access permissions for volunteers
-  if (userRole === "VOLUNTEER") {
-    const hasAccess = child.assignments.some(assignment => 
-      assignment.volunteerId === userId && assignment.isActive
-    );
-    
-    if (!hasAccess) {
-      throw new Error("Access denied");
-    }
-  }
-
-  return { activeSession, child };
-}
-
-interface PageProps {
-  params: { id: string };
-}
-
-export default async function SessionPage({ params }: PageProps) {
-  const session = await getServerSession(authOptions);
-  const userRole = session?.user?.role || "VOLUNTEER";
-  const userId = session?.user?.id || "";
-
-  try {
-    const { activeSession, child } = await getSessionData(params.id, userRole, userId);
-
-    return (
-      <div className="p-6 space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-4">
-            <Link href={`/children/${params.id}`}>
-              <Button variant="outline" size="sm">
-                ← Back to Profile
-              </Button>
-            </Link>
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">
-                Session with {child.name}
-              </h1>
-              <p className="text-gray-600">
-                {child.age} years old • {child.state}
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center space-x-2">
-            {activeSession ? (
-              <Badge 
-                variant="secondary" 
-                className={`${
-                  activeSession.status === "IN_PROGRESS" 
-                    ? "bg-green-100 text-green-800" 
-                    : "bg-blue-100 text-blue-800"
-                }`}
-              >
-                <PlayCircle className="h-3 w-3 mr-1" />
-                {activeSession.status === "IN_PROGRESS" ? "Session Active" : "Session Planned"}
-              </Badge>
-            ) : (
-              <Badge variant="outline">
-                No Active Session
-              </Badge>
-            )}
-          </div>
-        </div>
-
-        {/* Session Interface */}
-        <SessionInterface 
-          child={child} 
-          activeSession={activeSession} 
-          userId={userId}
-          userRole={userRole}
-        />
-      </div>
-    );
-
-  } catch (error) {
+  if (error) {
     return (
       <div className="p-6">
         <Card>
           <CardContent className="text-center py-12">
             <AlertTriangle className="h-12 w-12 text-red-400 mx-auto mb-4" />
             <h3 className="text-lg font-medium text-gray-900 mb-2">Access Denied</h3>
-            <p className="text-gray-600 mb-4">
-              You don't have permission to access this session.
-            </p>
+            <p className="text-gray-600 mb-4">{error}</p>
             <Link href="/children">
               <Button variant="outline">Back to Children</Button>
             </Link>
@@ -161,4 +82,45 @@ export default async function SessionPage({ params }: PageProps) {
       </div>
     );
   }
+
+  return (
+    <div className="p-6 space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center space-x-4">
+          <Link href={`/children/${params?.id}`}>
+            <Button variant="outline" size="sm">
+              ← Back to Profile
+            </Button>
+          </Link>
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">
+              Session with {childData?.name}
+            </h1>
+            <p className="text-gray-600">
+              {childData?.age} years old • {childData?.state}
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center space-x-2">
+          {sessionData ? (
+            <span className={`px-3 py-1 rounded-full text-xs font-semibold ${sessionData.status === "IN_PROGRESS" ? "bg-green-100 text-green-800" : "bg-blue-100 text-blue-800"}`}>
+              {sessionData.status === "IN_PROGRESS" ? "Session Active" : "Session Planned"}
+            </span>
+          ) : (
+            <span className="px-3 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-800">
+              No Active Session
+            </span>
+          )}
+        </div>
+      </div>
+      {/* Session Interface */}
+      <SessionInterface
+        child={childData}
+        activeSession={sessionData}
+        userId={userId}
+        userRole={userRole}
+      />
+    </div>
+  );
 }

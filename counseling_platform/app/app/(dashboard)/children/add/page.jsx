@@ -12,7 +12,6 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", { value: true });
 const react_1 = require("react");
 const navigation_1 = require("next/navigation");
-const react_2 = require("next-auth/react");
 const card_1 = require("@/components/ui/card");
 const input_1 = require("@/components/ui/input");
 const label_1 = require("@/components/ui/label");
@@ -47,7 +46,6 @@ const COMMON_CHALLENGES = [
 function AddChildPage() {
     var _a;
     const router = (0, navigation_1.useRouter)();
-    const { data: session } = (0, react_2.useSession)();
     const [formData, setFormData] = (0, react_1.useState)({
         name: '',
         age: '',

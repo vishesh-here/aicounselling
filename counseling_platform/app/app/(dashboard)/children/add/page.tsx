@@ -1,9 +1,7 @@
-
 'use client';
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useSession } from 'next-auth/react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -59,7 +57,6 @@ interface FormErrors {
 
 export default function AddChildPage() {
   const router = useRouter();
-  const { data: session } = useSession();
   const [formData, setFormData] = useState<FormData>({
     name: '',
     age: '',

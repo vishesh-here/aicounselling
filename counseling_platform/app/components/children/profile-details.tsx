@@ -1,6 +1,6 @@
-
 "use client";
 
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -10,14 +10,32 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
+import { supabase } from "@/lib/supabaseClient";
 
 interface ProfileDetailsProps {
   child: any;
-  userRole: string;
 }
 
-export function ProfileDetails({ child, userRole }: ProfileDetailsProps) {
+export default function ProfileDetails({ child }: ProfileDetailsProps) {
   const router = useRouter();
+  const [session, setSession] = useState<any>(null);
+
+  useEffect(() => {
+    const getSession = async () => {
+      const { data } = await supabase.auth.getSession();
+      setSession(data.session);
+    };
+    getSession();
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+    });
+    return () => {
+      listener?.subscription.unsubscribe();
+    };
+  }, []);
+
+  const user = session?.user;
+  const role = user?.user_metadata?.role || "VOLUNTEER";
 
   const openAiMentor = () => {
     router.push(`/ai-mentor/${child.id}`);
@@ -57,7 +75,7 @@ export function ProfileDetails({ child, userRole }: ProfileDetailsProps) {
               Basic Information
             </CardTitle>
             <div className="flex items-center gap-2">
-              {(userRole === "VOLUNTEER" || userRole === "ADMIN") && (
+              {(role === "VOLUNTEER" || role === "ADMIN") && (
                 <Button 
                   size="sm" 
                   onClick={openAiMentor}
@@ -68,7 +86,7 @@ export function ProfileDetails({ child, userRole }: ProfileDetailsProps) {
                   <ExternalLink className="h-3 w-3 ml-1" />
                 </Button>
               )}
-              {userRole === "ADMIN" && (
+              {role === "ADMIN" && (
                 <Button size="sm" variant="outline">
                   <Edit className="h-4 w-4 mr-2" />
                   Edit Profile
@@ -145,6 +163,7 @@ export function ProfileDetails({ child, userRole }: ProfileDetailsProps) {
               </div>
             </div>
           </div>
+          <div className="text-sm text-gray-500">Role: {role}</div>
         </CardContent>
       </Card>
 

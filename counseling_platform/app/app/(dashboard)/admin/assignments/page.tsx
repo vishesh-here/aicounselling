@@ -1,4 +1,3 @@
-
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-config";
 import { prisma } from "@/lib/db";
@@ -65,7 +64,7 @@ async function getAssignmentData() {
 export default async function AssignmentsPage() {
   const session = await getServerSession(authOptions);
   
-  if (session?.user?.role !== "ADMIN") {
+  if (session?.user?.user_metadata?.role !== "ADMIN") {
     return (
       <div className="p-6">
         <Card>

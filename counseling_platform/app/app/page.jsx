@@ -12,15 +12,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const next_auth_1 = require("next-auth");
 const navigation_1 = require("next/navigation");
 const auth_config_1 = require("@/lib/auth-config");
-function HomePage() {
-    return __awaiter(this, void 0, void 0, function* () {
-        const session = yield (0, next_auth_1.getServerSession)(auth_config_1.authOptions);
-        if (session) {
-            (0, navigation_1.redirect)("/dashboard");
-        }
-        else {
-            (0, navigation_1.redirect)("/login");
-        }
-    });
+export default function HomePage() {
+    // Optionally, you can use a client-side redirect here if needed
+    return null;
 }
-exports.default = HomePage;

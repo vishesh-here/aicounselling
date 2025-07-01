@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect } from "react";
@@ -15,6 +14,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabaseClient";
 
 interface SessionInterfaceProps {
   child: any;
@@ -36,29 +36,50 @@ export function SessionInterface({ child, activeSession, userId, userRole }: Ses
 
   const activeConcerns = child.concerns?.filter((c: any) => c.status !== "RESOLVED") || [];
 
-  // Start a new session
+  // Start a new session using Supabase
   const startSession = async () => {
     try {
-      const response = await fetch("/api/sessions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          childId: child.id,
-          action: "start"
-        })
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setCurrentSession(data.session);
-        toast.success("Session started successfully!");
+      // Check for existing session
+      const { data: existingSession, error: findError } = await supabase
+        .from('session')
+        .select('*')
+        .eq('childId', child.id)
+        .in('status', ['PLANNED', 'IN_PROGRESS'])
+        .maybeSingle();
+      if (findError) throw findError;
+      if (existingSession) {
+        // Update to IN_PROGRESS
+        const { data: updatedSession, error: updateError } = await supabase
+          .from('session')
+          .update({ status: 'IN_PROGRESS', startedAt: new Date().toISOString() })
+          .eq('id', existingSession.id)
+          .select()
+          .single();
+        if (updateError) throw updateError;
+        setCurrentSession(updatedSession);
+        toast.success('Session started successfully!');
         router.refresh();
       } else {
-        toast.error("Failed to start session");
+        // Create new session
+        const { data: newSession, error: createError } = await supabase
+          .from('session')
+          .insert({
+            childId: child.id,
+            volunteerId: userId,
+            status: 'IN_PROGRESS',
+            sessionType: 'COUNSELING',
+            startedAt: new Date().toISOString(),
+          })
+          .select()
+          .single();
+        if (createError) throw createError;
+        setCurrentSession(newSession);
+        toast.success('Session created and started successfully!');
+        router.refresh();
       }
     } catch (error) {
-      console.error("Error starting session:", error);
-      toast.error("Failed to start session");
+      console.error('Error starting session:', error);
+      toast.error('Failed to start session');
     }
   };
 
@@ -68,53 +89,49 @@ export function SessionInterface({ child, activeSession, userId, userRole }: Ses
     setShowRichSummary(true);
   };
 
-  // Handle saving session summary
-  const handleSaveSummary = async (summaryData: any) => {
+  // Save session summary (draft or final) using Supabase
+  const saveSessionSummary = async (summaryData: any, isDraft: boolean) => {
     try {
-      const response = await fetch("/api/sessions/summary", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          sessionId: currentSession.id,
-          summaryData,
-          isDraft: true
-        })
-      });
-
-      if (response.ok) {
-        toast.success("Session summary saved as draft");
+      // Upsert session summary
+      const { data: existingSummary, error: findError } = await supabase
+        .from('sessionSummary')
+        .select('*')
+        .eq('sessionId', currentSession.id)
+        .maybeSingle();
+      if (findError) throw findError;
+      const summaryPayload = {
+        sessionId: currentSession.id,
+        ...summaryData,
+        isDraft,
+      };
+      let result;
+      if (existingSummary) {
+        result = await supabase
+          .from('sessionSummary')
+          .update(summaryPayload)
+          .eq('sessionId', currentSession.id);
       } else {
-        toast.error("Failed to save summary");
+        result = await supabase
+          .from('sessionSummary')
+          .insert(summaryPayload);
       }
+      if (result.error) throw result.error;
+      toast.success(isDraft ? 'Session summary saved as draft' : 'Session ended and summary submitted successfully!');
+      if (!isDraft) router.push(`/children/${child.id}`);
     } catch (error) {
-      console.error("Error saving summary:", error);
-      toast.error("Failed to save summary");
+      console.error('Error saving session summary:', error);
+      toast.error('Failed to save summary');
     }
   };
 
-  // Handle submitting session summary
-  const handleSubmitSummary = async (summaryData: any) => {
-    try {
-      const response = await fetch("/api/sessions/summary", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          sessionId: currentSession.id,
-          summaryData,
-          isDraft: false
-        })
-      });
+  // Handle saving session summary (draft)
+  const handleSaveSummary = async (summaryData: any) => {
+    await saveSessionSummary(summaryData, true);
+  };
 
-      if (response.ok) {
-        toast.success("Session ended and summary submitted successfully!");
-        router.push(`/children/${child.id}`);
-      } else {
-        toast.error("Failed to submit summary");
-      }
-    } catch (error) {
-      console.error("Error submitting summary:", error);
-      toast.error("Failed to submit summary");
-    }
+  // Handle submitting session summary (final)
+  const handleSubmitSummary = async (summaryData: any) => {
+    await saveSessionSummary(summaryData, false);
   };
 
   // Navigate to AI Mentor

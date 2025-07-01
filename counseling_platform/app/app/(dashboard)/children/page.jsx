@@ -15,7 +15,6 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const react_1 = require("react");
 const navigation_1 = require("next/navigation");
-const react_2 = require("next-auth/react");
 const card_1 = require("@/components/ui/card");
 const badge_1 = require("@/components/ui/badge");
 const button_1 = require("@/components/ui/button");
@@ -36,7 +35,6 @@ function ChildrenPage() {
     var _a, _b, _c, _d, _e, _f, _g;
     const router = (0, navigation_1.useRouter)();
     const searchParams = (0, navigation_1.useSearchParams)();
-    const { data: session } = (0, react_2.useSession)();
     const [children, setChildren] = (0, react_1.useState)([]);
     const [loading, setLoading] = (0, react_1.useState)(true);
     const [searchTerm, setSearchTerm] = (0, react_1.useState)('');

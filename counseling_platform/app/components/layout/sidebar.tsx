@@ -1,8 +1,6 @@
-
 "use client";
 
-import { useState } from "react";
-import { useSession, signOut } from "next-auth/react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
@@ -20,6 +18,7 @@ import {
   ChevronDown,
   UserPlus,
 } from "lucide-react";
+import { supabase } from "@/lib/supabaseClient";
 
 interface SidebarProps {
   className?: string;
@@ -69,13 +68,28 @@ const adminNavigation = [
 
 export function Sidebar({ className }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
-  const { data: session } = useSession();
+  const [session, setSession] = useState<any>(null);
   const pathname = usePathname();
 
-  const isAdmin = session?.user?.role === "ADMIN";
+  useEffect(() => {
+    const getSession = async () => {
+      const { data } = await supabase.auth.getSession();
+      setSession(data.session);
+    };
+    getSession();
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+    });
+    return () => {
+      listener?.subscription.unsubscribe();
+    };
+  }, []);
 
-  const handleSignOut = () => {
-    signOut({ callbackUrl: "/login" });
+  const isAdmin = session?.user?.user_metadata?.role === "ADMIN";
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    window.location.href = "/login";
   };
 
   return (
@@ -162,16 +176,16 @@ export function Sidebar({ className }: SidebarProps) {
         <div className="flex items-center space-x-3">
           <div className="flex h-8 w-8 items-center justify-center rounded-full bg-orange-600">
             <span className="text-sm font-medium">
-              {session?.user?.name?.charAt(0).toUpperCase() || "U"}
+              {session?.user?.email?.charAt(0).toUpperCase() || "U"}
             </span>
           </div>
           {!collapsed && (
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-white truncate">
-                {session?.user?.name || "User"}
+                {session?.user?.email || "User"}
               </p>
               <p className="text-xs text-slate-400 truncate">
-                {session?.user?.role?.toLowerCase() || "volunteer"}
+                {session?.user?.user_metadata?.role?.toLowerCase() || "volunteer"}
               </p>
             </div>
           )}

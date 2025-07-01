@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useEffect, useState } from "react";
@@ -14,9 +13,13 @@ export function DashboardStats({ data, userRole }: DashboardStatsProps) {
   const [animatedStats, setAnimatedStats] = useState<any>({});
 
   useEffect(() => {
-    // Animate the numbers counting up
     const stats = userRole === "ADMIN" ? data.stats : data.stats;
-    const keys = Object.keys(stats);
+    const keys = Object.keys(stats || {});
+    const timers: NodeJS.Timeout[] = [];
+
+    if (!keys.length) {
+      return;
+    }
     
     keys.forEach((key) => {
       const finalValue = stats[key];
@@ -35,7 +38,13 @@ export function DashboardStats({ data, userRole }: DashboardStatsProps) {
           [key]: currentValue
         }));
       }, 30);
+      timers.push(timer);
     });
+
+    // Cleanup: clear all timers
+    return () => {
+      timers.forEach(clearInterval);
+    };
   }, [data.stats, userRole]);
 
   if (userRole === "ADMIN") {

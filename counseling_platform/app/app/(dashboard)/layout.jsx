@@ -9,24 +9,19 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-const next_auth_1 = require("next-auth");
 const navigation_1 = require("next/navigation");
 const sidebar_1 = require("@/components/layout/sidebar");
 const auth_config_1 = require("@/lib/auth-config");
-function DashboardLayout({ children, }) {
-    return __awaiter(this, void 0, void 0, function* () {
-        const session = yield (0, next_auth_1.getServerSession)(auth_config_1.authOptions);
-        if (!session) {
-            (0, navigation_1.redirect)("/login");
-        }
-        return (<div className="flex h-screen bg-gray-50">
+
+export default function DashboardLayout({ children }) {
+  return (
+    <div className="flex h-screen bg-gray-50">
       <sidebar_1.Sidebar />
       <main className="flex-1 overflow-hidden">
         <div className="h-full overflow-y-auto">
           {children}
         </div>
       </main>
-    </div>);
-    });
+    </div>
+  );
 }
-exports.default = DashboardLayout;

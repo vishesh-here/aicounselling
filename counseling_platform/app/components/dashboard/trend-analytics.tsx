@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect } from "react";
@@ -17,6 +16,7 @@ import {
   Tooltip, 
   Legend 
 } from "recharts";
+import { supabase } from "@/lib/supabaseClient";
 
 interface TrendData {
   week: string;
@@ -42,32 +42,91 @@ export function TrendAnalytics({ className }: TrendAnalyticsProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Helper to get all weeks between two dates
+  function getWeeklyBuckets(startDate: Date, endDate: Date) {
+    const weeks: { startDate: Date; endDate: Date; weekLabel: string }[] = [];
+    const current = new Date(startDate);
+    // Start from Monday
+    current.setDate(current.getDate() - current.getDay() + 1);
+    while (current <= endDate) {
+      const weekStart = new Date(current);
+      const weekEnd = new Date(current);
+      weekEnd.setDate(weekEnd.getDate() + 6);
+      weekEnd.setHours(23, 59, 59, 999);
+      weeks.push({
+        startDate: new Date(weekStart),
+        endDate: new Date(weekEnd),
+        weekLabel: `${weekStart.getMonth() + 1}/${weekStart.getDate()}`,
+      });
+      current.setDate(current.getDate() + 7);
+    }
+    return weeks;
+  }
+
+  // Fetch and aggregate trend data from Supabase
   const fetchTrendData = async (month?: string) => {
     setLoading(true);
     setError(null);
-    
     try {
-      const params = new URLSearchParams();
+      // Fetch all sessions and concerns
+      const [{ data: sessions, error: sessionsError }, { data: concerns, error: concernsError }] = await Promise.all([
+        supabase.from('session').select('id, createdAt, status, updatedAt'),
+        supabase.from('concern').select('id, createdAt, status, updatedAt'),
+      ]);
+      if (sessionsError || concernsError) throw sessionsError || concernsError;
+      // Determine date range
+      let startDate: Date;
+      let endDate: Date;
+      const now = new Date();
       if (month && month !== "all") {
         const [year, monthNum] = month.split("-");
-        params.append("month", monthNum);
-        params.append("year", year);
-      }
-      
-      const response = await fetch(`/api/dashboard/trends?${params.toString()}`);
-      
-      if (!response.ok) {
-        throw new Error("Failed to fetch trend data");
-      }
-      
-      const result = await response.json();
-      
-      if (result.success) {
-        setData(result.data || []);
-        setAvailableMonths(result.availableMonths || []);
+        startDate = new Date(parseInt(year), parseInt(monthNum) - 1, 1);
+        endDate = new Date(parseInt(year), parseInt(monthNum), 0, 23, 59, 59, 999);
       } else {
-        throw new Error("Invalid response format");
+        endDate = now;
+        startDate = new Date();
+        startDate.setDate(startDate.getDate() - (12 * 7)); // 12 weeks ago
       }
+      // Generate weekly buckets
+      const weeks = getWeeklyBuckets(startDate, endDate);
+      // Aggregate data per week
+      const trendData = weeks.map((week) => {
+        const weekSessions = (sessions || []).filter((s) => {
+          const created = new Date(s.createdAt);
+          return created >= week.startDate && created <= week.endDate;
+        });
+        const weekConcernsRecorded = (concerns || []).filter((c) => {
+          const created = new Date(c.createdAt);
+          return created >= week.startDate && created <= week.endDate;
+        });
+        const weekConcernsResolved = (concerns || []).filter((c) => {
+          return c.status === "RESOLVED" && c.updatedAt && new Date(c.updatedAt) >= week.startDate && new Date(c.updatedAt) <= week.endDate;
+        });
+        return {
+          week: week.weekLabel,
+          fullDate: week.startDate.toISOString().split('T')[0],
+          sessions: weekSessions.length,
+          concernsRecorded: weekConcernsRecorded.length,
+          concernsResolved: weekConcernsResolved.length,
+        };
+      });
+      setData(trendData);
+      // Compute available months for filter
+      const allDates = [
+        ...(sessions || []).map((s) => new Date(s.createdAt)),
+        ...(concerns || []).map((c) => new Date(c.createdAt)),
+      ];
+      const oldestDate = allDates.length > 0 ? new Date(Math.min(...allDates.map((d) => d.getTime()))) : now;
+      const availableMonthsArr: AvailableMonth[] = [];
+      const iterDate = new Date(oldestDate);
+      while (iterDate <= now) {
+        availableMonthsArr.push({
+          value: `${iterDate.getFullYear()}-${(iterDate.getMonth() + 1).toString().padStart(2, '0')}`,
+          label: iterDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
+        });
+        iterDate.setMonth(iterDate.getMonth() + 1);
+      }
+      setAvailableMonths(availableMonthsArr.reverse());
     } catch (err) {
       console.error("Trend data fetch error:", err);
       setError("Failed to load trend data");

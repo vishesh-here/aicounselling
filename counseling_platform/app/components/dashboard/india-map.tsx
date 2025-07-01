@@ -1,9 +1,9 @@
-
 "use client";
 
 import { useState, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Users, UserCheck, Calendar, TrendingUp } from "lucide-react";
+import { supabase } from "@/lib/supabaseClient";
 
 // @ts-ignore - Suppress all React Simple Maps TypeScript compatibility issues with React 18
 import { ComposableMap, Geographies, Geography, ZoomableGroup } from "react-simple-maps";
@@ -34,14 +34,79 @@ export function IndiaMap({ data }: IndiaMapProps) {
     fetchMapData();
   }, []);
 
+  // Fetch and aggregate map data from Supabase
   const fetchMapData = async () => {
+    setLoading(true);
+    setError(null);
     try {
-      const response = await fetch('/api/dashboard/map-data');
-      if (!response.ok) {
-        throw new Error('Failed to fetch map data');
+      // Fetch all children, volunteers, sessions, and concerns
+      const [{ data: children, error: childrenError }, { data: volunteers, error: volunteersError }, { data: sessions, error: sessionsError }, { data: concerns, error: concernsError }] = await Promise.all([
+        supabase.from('child').select('id, state, isActive'),
+        supabase.from('user').select('id, state, role, isActive'),
+        supabase.from('session').select('id, childId, status'),
+        supabase.from('concern').select('id, childId, status'),
+      ]);
+      if (childrenError || volunteersError || sessionsError || concernsError) {
+        throw childrenError || volunteersError || sessionsError || concernsError;
       }
-      const result = await response.json();
-      setMapData(result.data || []);
+      // Aggregate by state
+      const stateMap: { [state: string]: MapDataState } = {};
+      // Children
+      (children || []).forEach((child) => {
+        if (!child.isActive || !child.state) return;
+        if (!stateMap[child.state]) {
+          stateMap[child.state] = {
+            state: child.state,
+            children: 0,
+            volunteers: 0,
+            sessions: 0,
+            concerns: 0,
+            resolvedConcerns: 0,
+            resolutionRate: 0,
+          };
+        }
+        stateMap[child.state].children += 1;
+      });
+      // Volunteers
+      (volunteers || []).forEach((vol) => {
+        if (!vol.isActive || vol.role !== 'VOLUNTEER' || !vol.state) return;
+        if (!stateMap[vol.state]) {
+          stateMap[vol.state] = {
+            state: vol.state,
+            children: 0,
+            volunteers: 0,
+            sessions: 0,
+            concerns: 0,
+            resolvedConcerns: 0,
+            resolutionRate: 0,
+          };
+        }
+        stateMap[vol.state].volunteers += 1;
+      });
+      // Sessions (by child state)
+      (sessions || []).forEach((session) => {
+        const child = (children || []).find((c) => c.id === session.childId);
+        if (!child || !child.state || !child.isActive) return;
+        if (!stateMap[child.state]) return;
+        stateMap[child.state].sessions += 1;
+      });
+      // Concerns (by child state)
+      (concerns || []).forEach((concern) => {
+        const child = (children || []).find((c) => c.id === concern.childId);
+        if (!child || !child.state || !child.isActive) return;
+        if (!stateMap[child.state]) return;
+        stateMap[child.state].concerns += 1;
+        if (concern.status === 'RESOLVED') {
+          stateMap[child.state].resolvedConcerns += 1;
+        }
+      });
+      // Compute resolution rate
+      Object.values(stateMap).forEach((state) => {
+        state.resolutionRate = state.concerns > 0 ? Math.round((state.resolvedConcerns / state.concerns) * 100) : 0;
+      });
+      // Convert to array and sort
+      const stateDataArr = Object.values(stateMap).sort((a, b) => b.children - a.children);
+      setMapData(stateDataArr);
     } catch (err) {
       console.error('Error fetching map data:', err);
       setError('Failed to load map data');

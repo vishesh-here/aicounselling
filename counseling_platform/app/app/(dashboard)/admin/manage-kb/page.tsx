@@ -1,4 +1,3 @@
-
 import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
@@ -43,7 +42,7 @@ async function getKnowledgeBaseData() {
 export default async function ManageKnowledgeBasePage() {
   const session = await getServerSession(authOptions);
   
-  if (!session?.user || session.user.role !== "ADMIN") {
+  if (!session?.user || session.user.user_metadata?.role !== "ADMIN") {
     redirect("/dashboard");
   }
 

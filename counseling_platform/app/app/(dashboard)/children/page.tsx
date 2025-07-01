@@ -1,9 +1,7 @@
-
 'use client';
 
 import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useSession } from 'next-auth/react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -86,7 +84,6 @@ const INDIAN_STATES = [
 export default function ChildrenPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { data: session } = useSession();
   
   const [children, setChildren] = useState<Child[]>([]);
   const [loading, setLoading] = useState(true);
@@ -94,7 +91,7 @@ export default function ChildrenPage() {
   const [stateFilter, setStateFilter] = useState('All States');
   const [genderFilter, setGenderFilter] = useState('All');
   const [ageFilter, setAgeFilter] = useState('All');
-  const [showAssignedOnly, setShowAssignedOnly] = useState(session?.user?.role === 'VOLUNTEER');
+  const [showAssignedOnly, setShowAssignedOnly] = useState(false);
   const [deleteDialog, setDeleteDialog] = useState<DeleteDialogState>({
     isOpen: false,
     child: null
@@ -130,7 +127,7 @@ export default function ChildrenPage() {
       }
       
       // For volunteers, add assignment filtering
-      if (session?.user?.role === 'VOLUNTEER' && showAssignedOnly) {
+      if (showAssignedOnly) {
         params.append('assignedOnly', 'true');
       }
 
@@ -226,41 +223,24 @@ export default function ChildrenPage() {
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Children Profiles</h1>
           <p className="text-gray-600">
-            {session?.user?.role === 'ADMIN' 
-              ? 'Manage and monitor all children in the program'
-              : showAssignedOnly 
-                ? 'Viewing your assigned children only'
-                : 'Viewing all children in the program'
+            {showAssignedOnly 
+              ? 'Viewing your assigned children only'
+              : 'Viewing all children in the program'
             }
           </p>
         </div>
         <div className="flex items-center gap-4">
-          {session?.user?.role === 'VOLUNTEER' && (
+          {showAssignedOnly && (
             <div className="flex items-center gap-2 text-sm">
-              <span className={!showAssignedOnly ? 'font-medium' : 'text-gray-600'}>
-                All Children
-              </span>
-              <button
-                onClick={() => setShowAssignedOnly(!showAssignedOnly)}
-                className="flex items-center"
-              >
-                {showAssignedOnly ? (
-                  <ToggleRight className="h-6 w-6 text-blue-600" />
-                ) : (
-                  <ToggleLeft className="h-6 w-6 text-gray-400" />
-                )}
-              </button>
-              <span className={showAssignedOnly ? 'font-medium' : 'text-gray-600'}>
+              <span className="font-medium">
                 My Assigned Only
               </span>
             </div>
           )}
-          {session?.user?.role === 'ADMIN' && (
-            <Button onClick={() => router.push('/children/add')} className="flex items-center gap-2">
-              <Plus className="h-4 w-4" />
-              Add New Child
-            </Button>
-          )}
+          <Button onClick={() => router.push('/children/add')} className="flex items-center gap-2">
+            <Plus className="h-4 w-4" />
+            Add New Child
+          </Button>
         </div>
       </div>
 
@@ -389,12 +369,10 @@ export default function ChildrenPage() {
               <p className="text-gray-600 mb-4">
                 {searchTerm || stateFilter !== 'All States' || genderFilter !== 'All' || ageFilter !== 'All'
                   ? 'Try adjusting your search filters'
-                  : session?.user?.role === 'ADMIN' 
-                    ? 'Get started by adding your first child profile'
-                    : 'No children have been assigned to you yet'
+                  : 'No children have been assigned to you yet'
                 }
               </p>
-              {session?.user?.role === 'ADMIN' && (
+              {showAssignedOnly && (
                 <Button onClick={() => router.push('/children/add')}>
                   <Plus className="mr-2 h-4 w-4" />
                   Add First Child
@@ -432,7 +410,7 @@ export default function ChildrenPage() {
                         <ChevronRight className="ml-1 h-4 w-4" />
                       </Button>
                     </Link>
-                    {session?.user?.role === 'ADMIN' && (
+                    {showAssignedOnly && (
                       <>
                         <Button
                           variant="outline"

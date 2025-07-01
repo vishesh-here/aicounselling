@@ -1,8 +1,6 @@
-
 "use client";
 
 import { useState, useEffect } from "react";
-import { signIn, getSession } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Heart, Eye, EyeOff, CheckCircle, Clock, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
+import { supabase } from "@/lib/supabaseClient";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -19,6 +18,8 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const router = useRouter();
   const searchParams = useSearchParams();
+
+  const callbackUrl = searchParams?.get('callbackUrl');
 
   useEffect(() => {
     const message = searchParams?.get('message');
@@ -33,26 +34,25 @@ export default function LoginPage() {
     setError("");
 
     try {
-      const result = await signIn("credentials", {
+      const { data, error: supabaseError } = await supabase.auth.signInWithPassword({
         email,
         password,
-        redirect: false,
       });
 
-      if (result?.error) {
-        if (result.error.includes("pending approval")) {
-          setError("Your account is pending admin approval. Please wait for approval before logging in.");
-          toast.error("Account pending approval");
-        } else if (result.error.includes("rejected")) {
-          setError("Your account application has been rejected. Please contact support for more information.");
-          toast.error("Account rejected");
+      if (supabaseError) {
+        setError(supabaseError.message || "Invalid email or password");
+        toast.error(supabaseError.message || "Invalid email or password");
+      } else if (data.user) {
+        toast.success("Login successful!");
+        const isSafeCallback = callbackUrl && callbackUrl.startsWith("/") && !callbackUrl.includes("://");
+        if (isSafeCallback && callbackUrl !== "/login" && callbackUrl !== "") {
+          router.push(callbackUrl);
         } else {
-          setError("Invalid email or password");
-          toast.error("Invalid email or password");
+          router.push("/dashboard");
         }
       } else {
-        toast.success("Login successful!");
-        router.push("/dashboard");
+        setError("Invalid email or password");
+        toast.error("Invalid email or password");
       }
     } catch (error) {
       console.error("Login error:", error);

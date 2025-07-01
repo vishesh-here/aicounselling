@@ -11,7 +11,6 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const react_1 = require("react");
-const react_2 = require("next-auth/react");
 const card_1 = require("@/components/ui/card");
 const button_1 = require("@/components/ui/button");
 const badge_1 = require("@/components/ui/badge");
@@ -23,7 +22,6 @@ const lucide_react_1 = require("lucide-react");
 const alert_1 = require("@/components/ui/alert");
 function UserApprovalsPage() {
     var _a, _b, _c, _d;
-    const { data: session } = (0, react_2.useSession)();
     const [users, setUsers] = (0, react_1.useState)([]);
     const [loading, setLoading] = (0, react_1.useState)(true);
     const [actionDialog, setActionDialog] = (0, react_1.useState)({

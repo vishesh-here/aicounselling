@@ -1,9 +1,7 @@
-
 'use client';
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useSession } from 'next-auth/react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -73,7 +71,6 @@ interface Child {
 
 export default function EditChildPage({ params }: { params: { id: string } }) {
   const router = useRouter();
-  const { data: session } = useSession();
   const [child, setChild] = useState<Child | null>(null);
   const [formData, setFormData] = useState<FormData>({
     name: '',
@@ -255,19 +252,6 @@ export default function EditChildPage({ params }: { params: { id: string } }) {
       setIsLoading(false);
     }
   };
-
-  if (session?.user?.role !== 'ADMIN') {
-    return (
-      <div className="p-6">
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>
-            You don't have permission to edit child profiles. Only administrators can perform this action.
-          </AlertDescription>
-        </Alert>
-      </div>
-    );
-  }
 
   if (isLoadingChild) {
     return (
