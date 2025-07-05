@@ -287,7 +287,7 @@ export default function ProfileDetails({ child }: ProfileDetailsProps) {
                   <div className="flex items-start justify-between">
                     <div>
                       <p className="font-medium text-gray-900">
-                        Assigned to: {assignment.volunteer?.name || "Unknown"}
+                        Assigned to: {assignment.volunteer?.name || "Unassigned"}
                       </p>
                       <p className="text-sm text-gray-600">
                         Specialization: {assignment.volunteer?.specialization || "General"}

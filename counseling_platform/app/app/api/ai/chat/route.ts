@@ -15,12 +15,12 @@ export async function POST(request: NextRequest) {
 
     const { 
       message, 
-      childId, 
+      child_id, 
       sessionId, 
       conversationId 
     } = await request.json();
 
-    if (!message || !childId || !sessionId) {
+    if (!message || !child_id || !sessionId) {
       return NextResponse.json({ 
         error: "Message, child ID, and session ID are required" 
       }, { status: 400 });
@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
       conversation = await prisma.aiChatConversation.create({
         data: {
           sessionId,
-          childId,
+          child_id,
           volunteerId: session.user.id,
           conversationName: `Session Chat - ${new Date().toLocaleDateString()}`
         },
@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
     const ragContextResponse = await fetch(`${process.env.NEXTAUTH_URL}/api/ai/rag-context`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ childId, sessionId, conversationId: conversation.id })
+      body: JSON.stringify({ child_id, sessionId, conversationId: conversation.id })
     });
 
     const { context: ragContext } = await ragContextResponse.json();
@@ -84,7 +84,7 @@ export async function POST(request: NextRequest) {
     });
 
     // Extract and store important insights as conversation memory
-    await extractAndStoreMemory(aiResponse.content, message, childId, session.user.id, sessionId);
+    await extractAndStoreMemory(aiResponse.content, message, child_id, session.user.id, sessionId);
 
     return NextResponse.json({
       response: aiResponse.content,
@@ -256,7 +256,7 @@ Remember: You are here to support the volunteer in real-time during an active se
 async function extractAndStoreMemory(
   aiResponse: string, 
   userMessage: string, 
-  childId: string, 
+  child_id: string, 
   volunteerId: string, 
   sessionId: string
 ) {
@@ -299,7 +299,7 @@ async function extractAndStoreMemory(
 
       await prisma.conversationMemory.create({
         data: {
-          childId,
+          child_id,
           volunteerId,
           sessionId,
           memoryType: memoryType as any,

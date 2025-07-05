@@ -27,7 +27,7 @@ function AiMentorPage() {
     var _a, _b;
     const params = (0, navigation_1.useParams)();
     const router = (0, navigation_1.useRouter)();
-    const childId = params.childId;
+    const child_id = params.child_id;
     const [child, setChild] = (0, react_1.useState)(null);
     const [loading, setLoading] = (0, react_1.useState)(true);
     const [currentMessages, setCurrentMessages] = (0, react_1.useState)([]);
@@ -43,7 +43,7 @@ function AiMentorPage() {
     (0, react_1.useEffect)(() => {
         loadChildData();
         loadConversationHistory();
-    }, [childId]);
+    }, [child_id]);
     // Auto-scroll to bottom when new messages are added
     (0, react_1.useEffect)(() => {
         scrollToBottom();
@@ -54,7 +54,7 @@ function AiMentorPage() {
     };
     const loadChildData = () => __awaiter(this, void 0, void 0, function* () {
         try {
-            const response = yield fetch(`/api/children/${childId}`);
+            const response = yield fetch(`/api/children/${child_id}`);
             if (response.ok) {
                 const data = yield response.json();
                 setChild(data.child);
@@ -75,7 +75,7 @@ function AiMentorPage() {
     });
     const loadConversationHistory = () => __awaiter(this, void 0, void 0, function* () {
         try {
-            const response = yield fetch(`/api/ai/conversations/history/${childId}`);
+            const response = yield fetch(`/api/ai/conversations/history/${child_id}`);
             if (response.ok) {
                 const data = yield response.json();
                 setConversationHistory(data.conversations || []);
@@ -132,7 +132,7 @@ function AiMentorPage() {
                 },
                 body: JSON.stringify({
                     message: messageContent,
-                    childId,
+                    child_id,
                     sessionId: null,
                     conversationId: currentConversationId
                 })

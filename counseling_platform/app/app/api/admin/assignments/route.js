@@ -23,12 +23,12 @@ function POST(request) {
                 return server_1.NextResponse.json({ error: "Unauthorized" }, { status: 401 });
             }
             const body = yield request.json();
-            const { action, childId, volunteerId, assignmentId } = body;
+            const { action, child_id, volunteerId, assignmentId } = body;
             if (action === "assign") {
                 // Check if assignment already exists
                 const existingAssignment = yield db_1.prisma.assignment.findFirst({
                     where: {
-                        childId: childId,
+                        child_id: child_id,
                         volunteerId: volunteerId,
                         isActive: true
                     }
@@ -39,7 +39,7 @@ function POST(request) {
                 // Create new assignment
                 const assignment = yield db_1.prisma.assignment.create({
                     data: {
-                        childId: childId,
+                        child_id: child_id,
                         volunteerId: volunteerId,
                         isActive: true
                     },

@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { childId: string } }
+  { params }: { params: { child_id: string } }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -16,12 +16,12 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { childId } = params;
+    const { child_id } = params;
 
     // Get all conversations for this child with message counts
     const conversations = await prisma.aiChatConversation.findMany({
       where: {
-        childId: childId,
+        child_id: child_id,
         isActive: true
       },
       include: {

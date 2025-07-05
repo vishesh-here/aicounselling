@@ -22,7 +22,7 @@ const chat_input_1 = require("./chat-input");
 const quick_suggestions_1 = require("./quick-suggestions");
 const lucide_react_1 = require("lucide-react");
 const sonner_1 = require("sonner");
-function AiChatPanel({ childId, sessionId, childName, isMinimized = false, onMinimize, onMaximize, onClose }) {
+function AiChatPanel({ child_id, sessionId, childName, isMinimized = false, onMinimize, onMaximize, onClose }) {
     const [messages, setMessages] = (0, react_1.useState)([]);
     const [isLoading, setIsLoading] = (0, react_1.useState)(false);
     const [conversationId, setConversationId] = (0, react_1.useState)(null);
@@ -75,7 +75,7 @@ function AiChatPanel({ childId, sessionId, childName, isMinimized = false, onMin
                 },
                 body: JSON.stringify({
                     message: messageContent,
-                    childId,
+                    child_id,
                     sessionId,
                     conversationId
                 })

@@ -1,3 +1,5 @@
+'use client';
+import { useEffect, useState } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -9,13 +11,14 @@ import {
 } from "lucide-react";
 import { PreSessionBriefing } from "@/components/children/pre-session-briefing";
 import { SessionHistory } from "@/components/children/session-history";
-import { ProfileDetails } from "@/components/children/profile-details";
+import ProfileDetails from "@/components/children/profile-details";
 import Link from "next/link";
 import { formatDistanceToNow } from "date-fns";
+import { supabase } from '@/lib/supabaseClient';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-const supabase = createClient(supabaseUrl, supabaseKey);
+const supabaseClient = createClient(supabaseUrl, supabaseKey);
 
 export const dynamic = "force-dynamic";
 
@@ -23,29 +26,56 @@ interface PageProps {
   params: { id: string };
 }
 
-export default async function ChildDetailPage({ params }: PageProps) {
-  // Get user session from Supabase
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) {
-    return <div>Unauthorized</div>;
+export default function ChildDetailPage({ params }: PageProps) {
+  const [session, setSession] = useState<any>(null);
+  const [child, setChild] = useState<any>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    const fetchData = async () => {
+      const { data } = await supabase.auth.getSession();
+      setSession(data.session);
+      if (!data.session?.user) {
+        setError('Unauthorized');
+        return;
+      }
+      let query = supabase
+        .from('children')
+        .select('*, assignments(*, volunteer:users(id, name, specialization)), concerns(*), sessions(*, volunteer:users(id, name), summary:session_summaries(*))')
+        .eq('id', params.id)
+        .eq('isActive', true)
+        .single();
+      const user = data.session.user;
+      const userRole = user.user_metadata?.role || user.app_metadata?.role;
+      const { data: childData, error: childError } = await query;
+      if (childError || !childData) {
+        setError('Child not found or access denied');
+        return;
+      }
+      if (userRole === 'VOLUNTEER') {
+        const assigned = (childData.assignments || []).some((a: any) => a.volunteerId === user.id && a.isActive);
+        if (!assigned) {
+          setError('Unauthorized');
+          return;
+        }
+      }
+      let sortedSessions = (childData.sessions || []).sort((a: any, b: any) => {
+        const aTime = new Date(a.endedAt || a.startedAt).getTime();
+        const bTime = new Date(b.endedAt || b.startedAt).getTime();
+        return bTime - aTime;
+      });
+      childData.sessions = sortedSessions;
+      setChild(childData);
+    };
+    fetchData();
+  }, [params.id]);
+  if (error) {
+    return <div>{error}</div>;
   }
-  // Fetch child data
-  let query = supabase
-    .from('children')
-    .select('*, assignments(*, volunteer:users(id, name, specialization)), concerns(*), sessions(*)')
-    .eq('id', params.id)
-    .eq('is_active', true)
-    .single();
-  if (user.user_metadata.role === 'VOLUNTEER') {
-    query = query.contains('assignments', [{ volunteer_id: user.id, is_active: true }]);
+  if (!child) {
+    return <div>Loading...</div>;
   }
-  const { data: child, error } = await query;
-  if (error || !child) {
-    return <div>Child not found or access denied</div>;
-  }
-
-  const activeAssignment = child.assignments.find(a => a.is_active);
-  const activeConcerns = child.concerns.filter(c => c.status !== "RESOLVED");
+  const activeAssignment = child.assignments.find((a: any) => a.isActive);
+  const activeConcerns = child.concerns.filter((c: any) => c.status !== "RESOLVED");
   const lastSession = child.sessions[0];
 
   const getSeverityColor = (severity: string) => {
@@ -150,7 +180,7 @@ export default async function ChildDetailPage({ params }: PageProps) {
                 <p className="text-sm text-gray-600">Last Session</p>
                 <p className="text-sm font-medium text-gray-900">
                   {lastSession 
-                    ? formatDistanceToNow(new Date(lastSession.created_at)) + " ago"
+                    ? formatDistanceToNow(new Date(lastSession.endedAt || lastSession.startedAt)) + " ago"
                     : "No sessions yet"
                   }
                 </p>
@@ -184,7 +214,7 @@ export default async function ChildDetailPage({ params }: PageProps) {
               <div className="flex-1">
                 <h4 className="font-medium text-orange-900 mb-2">Active Concerns Requiring Attention</h4>
                 <div className="flex flex-wrap gap-2">
-                  {activeConcerns.map((concern) => (
+                  {activeConcerns.map((concern: any) => (
                     <Badge 
                       key={concern.id}
                       className={getSeverityColor(concern.severity)}
@@ -225,7 +255,7 @@ export default async function ChildDetailPage({ params }: PageProps) {
         </TabsContent>
 
         <TabsContent value="profile">
-          <ProfileDetails child={child} userRole={user.user_metadata.role} />
+          <ProfileDetails child={child} />
         </TabsContent>
       </Tabs>
     </div>

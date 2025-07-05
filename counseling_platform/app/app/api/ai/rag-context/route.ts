@@ -13,14 +13,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { childId, sessionId, conversationId } = await request.json();
+    const { child_id, sessionId, conversationId } = await request.json();
 
-    if (!childId) {
+    if (!child_id) {
       return NextResponse.json({ error: "Child ID is required" }, { status: 400 });
     }
 
     // Get comprehensive RAG context
-    const ragContext = await buildRAGContext(childId, sessionId, conversationId);
+    const ragContext = await buildRAGContext(child_id, sessionId, conversationId);
 
     return NextResponse.json({ context: ragContext });
   } catch (error) {
@@ -32,11 +32,11 @@ export async function POST(request: NextRequest) {
   }
 }
 
-async function buildRAGContext(childId: string, sessionId?: string, conversationId?: string) {
+async function buildRAGContext(child_id: string, sessionId?: string, conversationId?: string) {
   try {
     // 1. Get child profile with all related data
     const child = await prisma.child.findUnique({
-      where: { id: childId },
+      where: { id: child_id },
       include: {
         concerns: {
           where: { status: { not: "RESOLVED" } },
@@ -60,7 +60,7 @@ async function buildRAGContext(childId: string, sessionId?: string, conversation
 
     // 2. Get session history (last 5 sessions + current session)
     const sessionHistory = await prisma.session.findMany({
-      where: { childId },
+      where: { child_id },
       include: {
         summary: true,
         volunteer: {
@@ -87,7 +87,7 @@ async function buildRAGContext(childId: string, sessionId?: string, conversation
 
     // 4. Get conversation memories for this child
     const conversationMemories = await prisma.conversationMemory.findMany({
-      where: { childId },
+      where: { child_id },
       orderBy: [
         { importance: "desc" },
         { createdAt: "desc" }

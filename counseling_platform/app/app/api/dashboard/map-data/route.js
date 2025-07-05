@@ -48,7 +48,7 @@ function GET(request) {
         c.state,
         COUNT(s.id) as session_count
       FROM "sessions" s
-      JOIN "children" c ON s."childId" = c.id
+      JOIN "children" c ON s."child_id" = c.id
       WHERE c."isActive" = true AND c.state IS NOT NULL
       GROUP BY c.state
     `;
@@ -59,7 +59,7 @@ function GET(request) {
         COUNT(co.id) as concern_count,
         COUNT(CASE WHEN co.status = 'RESOLVED' THEN 1 END) as resolved_count
       FROM "concerns" co
-      JOIN "children" c ON co."childId" = c.id
+      JOIN "children" c ON co."child_id" = c.id
       WHERE c."isActive" = true AND c.state IS NOT NULL
       GROUP BY c.state
     `;

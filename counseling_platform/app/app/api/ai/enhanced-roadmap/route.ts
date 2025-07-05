@@ -14,11 +14,11 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { childId, childProfile, activeConcerns } = body;
+    const { child_id, childProfile, activeConcerns } = body;
 
     // Get recent sessions for context
     const recentSessions = await prisma.session.findMany({
-      where: { childId: childId },
+      where: { child_id: child_id },
       include: { summary: true },
       orderBy: { createdAt: "desc" },
       take: 3

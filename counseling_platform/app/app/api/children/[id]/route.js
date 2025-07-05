@@ -224,7 +224,7 @@ function DELETE(request, { params }) {
             // Also deactivate any active assignments
             yield prisma.assignment.updateMany({
                 where: {
-                    childId: id,
+                    child_id: id,
                     isActive: true
                 },
                 data: {

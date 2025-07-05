@@ -23,12 +23,12 @@ function POST(request) {
                 return server_1.NextResponse.json({ error: "Unauthorized" }, { status: 401 });
             }
             const body = yield request.json();
-            const { childId, sessionId, action, notes } = body;
+            const { child_id, sessionId, action, notes } = body;
             if (action === "start") {
                 // Check if there's already an active session for this child
                 const existingSession = yield db_1.prisma.session.findFirst({
                     where: {
-                        childId: childId,
+                        child_id: child_id,
                         status: { in: ["PLANNED", "IN_PROGRESS"] }
                     }
                 });
@@ -55,7 +55,7 @@ function POST(request) {
                     // Create new session
                     const newSession = yield db_1.prisma.session.create({
                         data: {
-                            childId: childId,
+                            child_id: child_id,
                             volunteerId: session.user.id,
                             status: "IN_PROGRESS",
                             sessionType: "COUNSELING",

@@ -41,16 +41,16 @@ export function SessionInterface({ child, activeSession, userId, userRole }: Ses
     try {
       // Check for existing session
       const { data: existingSession, error: findError } = await supabase
-        .from('session')
+        .from('sessions')
         .select('*')
-        .eq('childId', child.id)
+        .eq('child_id', child.id)
         .in('status', ['PLANNED', 'IN_PROGRESS'])
         .maybeSingle();
       if (findError) throw findError;
       if (existingSession) {
         // Update to IN_PROGRESS
         const { data: updatedSession, error: updateError } = await supabase
-          .from('session')
+          .from('sessions')
           .update({ status: 'IN_PROGRESS', startedAt: new Date().toISOString() })
           .eq('id', existingSession.id)
           .select()
@@ -62,9 +62,9 @@ export function SessionInterface({ child, activeSession, userId, userRole }: Ses
       } else {
         // Create new session
         const { data: newSession, error: createError } = await supabase
-          .from('session')
+          .from('sessions')
           .insert({
-            childId: child.id,
+            child_id: child.id,
             volunteerId: userId,
             status: 'IN_PROGRESS',
             sessionType: 'COUNSELING',
@@ -94,7 +94,7 @@ export function SessionInterface({ child, activeSession, userId, userRole }: Ses
     try {
       // Upsert session summary
       const { data: existingSummary, error: findError } = await supabase
-        .from('sessionSummary')
+        .from('session_summaries')
         .select('*')
         .eq('sessionId', currentSession.id)
         .maybeSingle();
@@ -103,19 +103,33 @@ export function SessionInterface({ child, activeSession, userId, userRole }: Ses
         sessionId: currentSession.id,
         ...summaryData,
         isDraft,
+        summary: summaryData.summary || "",
       };
       let result;
       if (existingSummary) {
         result = await supabase
-          .from('sessionSummary')
+          .from('session_summaries')
           .update(summaryPayload)
           .eq('sessionId', currentSession.id);
       } else {
         result = await supabase
-          .from('sessionSummary')
+          .from('session_summaries')
           .insert(summaryPayload);
       }
       if (result.error) throw result.error;
+      // If this is a final submission, update the session row as well
+      if (!isDraft) {
+        const now = new Date().toISOString();
+        const { error: sessionUpdateError } = await supabase
+          .from('sessions')
+          .update({
+            status: 'COMPLETED',
+            endedAt: now,
+            updatedAt: now
+          })
+          .eq('id', currentSession.id);
+        if (sessionUpdateError) throw sessionUpdateError;
+      }
       toast.success(isDraft ? 'Session summary saved as draft' : 'Session ended and summary submitted successfully!');
       if (!isDraft) router.push(`/children/${child.id}`);
     } catch (error) {
@@ -147,7 +161,7 @@ export function SessionInterface({ child, activeSession, userId, userRole }: Ses
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          childId: child.id,
+          child_id: child.id,
           childProfile: {
             name: child.name,
             age: child.age,
@@ -504,7 +518,7 @@ export function SessionInterface({ child, activeSession, userId, userRole }: Ses
             </DialogHeader>
             <RichSessionSummary
               sessionId={currentSession.id}
-              childId={child.id}
+              child_id={child.id}
               childName={child.name}
               sessionStartTime={new Date(currentSession.startedAt || currentSession.createdAt)}
               onSave={handleSaveSummary}

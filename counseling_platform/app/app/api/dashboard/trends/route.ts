@@ -25,13 +25,13 @@ export async function GET(request: NextRequest) {
   // Example: Fetch sessions per month for the last 6 months
   const { data: sessions, error: sessionsError } = await supabase
     .from('sessions')
-    .select('id, created_at')
-    .eq('is_active', true);
+    .select('id, createdAt')
+    .eq('isActive', true);
   // Aggregate sessions by month
   const trends: Record<string, number> = {};
   if (sessions) {
     sessions.forEach((s: any) => {
-      const month = s.created_at.slice(0, 7); // YYYY-MM
+      const month = s.createdAt.slice(0, 7); // YYYY-MM
       trends[month] = (trends[month] || 0) + 1;
     });
   }

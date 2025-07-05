@@ -30,7 +30,7 @@ function PreSessionBriefing({ child }) {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    childId: child.id,
+                    child_id: child.id,
                     childProfile: {
                         name: child.name,
                         age: child.age,

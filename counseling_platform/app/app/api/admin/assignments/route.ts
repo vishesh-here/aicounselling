@@ -22,22 +22,22 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
   const body = await request.json();
-  const { action, child_id, volunteer_id, assignment_id } = body;
+  const { action, child_id, volunteerId, assignment_id } = body;
   if (action === 'assign') {
     // Check if assignment already exists
     const { data: existing, error: existError } = await supabase
       .from('assignments')
       .select('*')
       .eq('child_id', child_id)
-      .eq('volunteer_id', volunteer_id)
-      .eq('is_active', true)
+      .eq('volunteerId', volunteerId)
+      .eq('isActive', true)
       .maybeSingle();
     if (existing) {
       return NextResponse.json({ error: 'Assignment already exists for this volunteer and child' }, { status: 400 });
     }
     const { data, error } = await supabase
       .from('assignments')
-      .insert([{ child_id, volunteer_id, is_active: true }])
+      .insert([{ child_id, volunteerId, isActive: true }])
       .select();
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
   if (action === 'remove' && assignment_id) {
     const { data, error } = await supabase
       .from('assignments')
-      .update({ is_active: false })
+      .update({ isActive: false })
       .eq('id', assignment_id)
       .select();
     if (error) {

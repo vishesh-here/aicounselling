@@ -46,7 +46,7 @@ const COMMON_TOPICS = [
     "Future Goals", "Emotional Regulation", "Behavioral Issues", "School Problems",
     "Health Concerns", "Social Skills", "Career Aspirations", "Cultural Identity"
 ];
-function RichSessionSummary({ sessionId, childId, childName, sessionStartTime, onSave, onSubmit, existingSummary }) {
+function RichSessionSummary({ sessionId, child_id, childName, sessionStartTime, onSave, onSubmit, existingSummary }) {
     const [summaryData, setSummaryData] = (0, react_1.useState)({
         sessionDuration: "",
         sessionType: "COUNSELING",

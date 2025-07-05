@@ -25,11 +25,11 @@ export async function GET(request: NextRequest) {
   let query = supabase
     .from('children')
     .select('*, assignments(*, volunteer:users(id, name, specialization)), concerns(*), sessions(*)')
-    .eq('is_active', true)
-    .order('created_at', { ascending: false });
+    .eq('isActive', true)
+    .order('createdAt', { ascending: false });
   // If volunteer, only show assigned children
   if (user.user_metadata.role === 'VOLUNTEER') {
-    query = query.contains('assignments', [{ volunteer_id: user.id, is_active: true }]);
+    query = query.contains('assignments', [{ volunteerId: user.id, isActive: true }]);
   }
   const { data, error } = await query;
   if (error) {
@@ -42,7 +42,27 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const supabase = getSupabase(request);
   const { data: { user }, error: userError } = await supabase.auth.getUser();
-  if (!user || user.user_metadata.role !== 'ADMIN') {
+  console.log('User roles 0:', {
+    user_metadata: user?.user_metadata?.role,
+    app_metadata: user?.app_metadata?.role,
+    // raw_user_meta_data: rawUserMeta?.role,
+    // raw_app_meta_data: rawAppMeta?.role,
+    // final: userRole
+  });
+  // Robust role check and logging
+  // @ts-expect-error: raw_user_meta_data may exist at runtime
+  const rawUserMeta = user?.['raw_user_meta_data'];
+  // @ts-expect-error: raw_app_meta_data may exist at runtime
+  const rawAppMeta = user?.['raw_app_meta_data'];
+  const userRole = user?.user_metadata?.role || user?.app_metadata?.role || rawUserMeta?.role || rawAppMeta?.role;
+  console.log('User roles:', {
+    user_metadata: user?.user_metadata?.role,
+    app_metadata: user?.app_metadata?.role,
+    raw_user_meta_data: rawUserMeta?.role,
+    raw_app_meta_data: rawAppMeta?.role,
+    final: userRole
+  });
+  if (!user || userRole !== 'ADMIN') {
     return NextResponse.json({ error: 'Unauthorized. Only administrators can create child profiles.' }, { status: 401 });
   }
   const body = await request.json();

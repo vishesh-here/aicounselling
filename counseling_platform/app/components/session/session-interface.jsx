@@ -40,7 +40,7 @@ function SessionInterface({ child, activeSession, userId, userRole }) {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    childId: child.id,
+                    child_id: child.id,
                     action: "start"
                 })
             });
@@ -126,7 +126,7 @@ function SessionInterface({ child, activeSession, userId, userRole }) {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    childId: child.id,
+                    child_id: child.id,
                     childProfile: {
                         name: child.name,
                         age: child.age,
@@ -420,7 +420,7 @@ function SessionInterface({ child, activeSession, userId, userRole }) {
             <dialog_1.DialogHeader>
               <dialog_1.DialogTitle>Complete Session Summary</dialog_1.DialogTitle>
             </dialog_1.DialogHeader>
-            <rich_session_summary_1.RichSessionSummary sessionId={currentSession.id} childId={child.id} childName={child.name} sessionStartTime={new Date(currentSession.startedAt || currentSession.createdAt)} onSave={handleSaveSummary} onSubmit={handleSubmitSummary}/>
+            <rich_session_summary_1.RichSessionSummary sessionId={currentSession.id} child_id={child.id} childName={child.name} sessionStartTime={new Date(currentSession.startedAt || currentSession.createdAt)} onSave={handleSaveSummary} onSubmit={handleSubmitSummary}/>
           </dialog_1.DialogContent>
         </dialog_1.Dialog>)}
     </div>);

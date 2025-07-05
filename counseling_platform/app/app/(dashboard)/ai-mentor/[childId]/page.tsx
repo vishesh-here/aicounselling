@@ -52,7 +52,7 @@ interface ConversationHistory {
 export default function AiMentorPage() {
   const params = useParams();
   const router = useRouter();
-  const childId = params.childId as string;
+  const child_id = params.child_id as string;
   
   const [child, setChild] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -71,7 +71,7 @@ export default function AiMentorPage() {
   useEffect(() => {
     loadChildData();
     loadConversationHistory();
-  }, [childId]);
+  }, [child_id]);
 
   // Auto-scroll to bottom when new messages are added
   useEffect(() => {
@@ -84,7 +84,7 @@ export default function AiMentorPage() {
 
   const loadChildData = async () => {
     try {
-      const response = await fetch(`/api/children/${childId}`);
+      const response = await fetch(`/api/children/${child_id}`);
       if (response.ok) {
         const data = await response.json();
         setChild(data.child);
@@ -103,7 +103,7 @@ export default function AiMentorPage() {
 
   const loadConversationHistory = async () => {
     try {
-      const response = await fetch(`/api/ai/conversations/history/${childId}`);
+      const response = await fetch(`/api/ai/conversations/history/${child_id}`);
       if (response.ok) {
         const data = await response.json();
         setConversationHistory(data.conversations || []);
@@ -165,7 +165,7 @@ export default function AiMentorPage() {
         },
         body: JSON.stringify({
           message: messageContent,
-          childId,
+          child_id,
           sessionId: null, // No specific session for dedicated AI mentor
           conversationId: currentConversationId
         })

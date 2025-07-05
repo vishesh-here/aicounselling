@@ -25,10 +25,10 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     .from('children')
     .select('*, assignments(*, volunteer:users(id, name, specialization)), concerns(*), sessions(*)')
     .eq('id', params.id)
-    .eq('is_active', true)
+    .eq('isActive', true)
     .single();
   if (user.user_metadata.role === 'VOLUNTEER') {
-    query = query.contains('assignments', [{ volunteer_id: user.id, is_active: true }]);
+    query = query.contains('assignments', [{ volunteerId: user.id, isActive: true }]);
   }
   const { data, error } = await query;
   if (error || !data) {
@@ -217,7 +217,7 @@ export async function DELETE(
     // Also deactivate any active assignments
     await prisma.assignment.updateMany({
       where: {
-        childId: id,
+        child_id: id,
         isActive: true
       },
       data: {

@@ -26,25 +26,25 @@ export async function GET(request: NextRequest) {
   const { data: childrenByState, error: childrenError } = await supabase
     .from('children')
     .select('state, count:id')
-    .eq('is_active', true)
+    .eq('isActive', true)
     .group('state');
   // Get volunteers count by state
   const { data: volunteersByState, error: volunteersError } = await supabase
     .from('users')
     .select('state, count:id')
     .eq('role', 'VOLUNTEER')
-    .eq('is_active', true)
+    .eq('isActive', true)
     .not('state', 'is', null)
     .group('state');
   // Get sessions count by state (through children)
   const { data: sessions, error: sessionsError } = await supabase
     .from('sessions')
     .select('id, child_id')
-    .eq('is_active', true);
+    .eq('isActive', true);
   const { data: children, error: childrenListError } = await supabase
     .from('children')
     .select('id, state')
-    .eq('is_active', true);
+    .eq('isActive', true);
   // Aggregate sessions by state
   const sessionsByState: Record<string, number> = {};
   if (sessions && children) {

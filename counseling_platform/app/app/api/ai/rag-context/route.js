@@ -22,12 +22,12 @@ function POST(request) {
             if (!(session === null || session === void 0 ? void 0 : session.user)) {
                 return server_1.NextResponse.json({ error: "Unauthorized" }, { status: 401 });
             }
-            const { childId, sessionId, conversationId } = yield request.json();
-            if (!childId) {
+            const { child_id, sessionId, conversationId } = yield request.json();
+            if (!child_id) {
                 return server_1.NextResponse.json({ error: "Child ID is required" }, { status: 400 });
             }
             // Get comprehensive RAG context
-            const ragContext = yield buildRAGContext(childId, sessionId, conversationId);
+            const ragContext = yield buildRAGContext(child_id, sessionId, conversationId);
             return server_1.NextResponse.json({ context: ragContext });
         }
         catch (error) {
@@ -37,13 +37,13 @@ function POST(request) {
     });
 }
 exports.POST = POST;
-function buildRAGContext(childId, sessionId, conversationId) {
+function buildRAGContext(child_id, sessionId, conversationId) {
     var _a, _b, _c, _d, _e, _f, _g, _h, _j;
     return __awaiter(this, void 0, void 0, function* () {
         try {
             // 1. Get child profile with all related data
             const child = yield db_1.prisma.child.findUnique({
-                where: { id: childId },
+                where: { id: child_id },
                 include: {
                     concerns: {
                         where: { status: { not: "RESOLVED" } },
@@ -65,7 +65,7 @@ function buildRAGContext(childId, sessionId, conversationId) {
             }
             // 2. Get session history (last 5 sessions + current session)
             const sessionHistory = yield db_1.prisma.session.findMany({
-                where: { childId },
+                where: { child_id },
                 include: {
                     summary: true,
                     volunteer: {
@@ -90,7 +90,7 @@ function buildRAGContext(childId, sessionId, conversationId) {
             }
             // 4. Get conversation memories for this child
             const conversationMemories = yield db_1.prisma.conversationMemory.findMany({
-                where: { childId },
+                where: { child_id },
                 orderBy: [
                     { importance: "desc" },
                     { createdAt: "desc" }

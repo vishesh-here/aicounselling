@@ -41,10 +41,10 @@ export function IndiaMap({ data }: IndiaMapProps) {
     try {
       // Fetch all children, volunteers, sessions, and concerns
       const [{ data: children, error: childrenError }, { data: volunteers, error: volunteersError }, { data: sessions, error: sessionsError }, { data: concerns, error: concernsError }] = await Promise.all([
-        supabase.from('child').select('id, state, isActive'),
+        supabase.from('children').select('id, state, isActive'),
         supabase.from('user').select('id, state, role, isActive'),
-        supabase.from('session').select('id, childId, status'),
-        supabase.from('concern').select('id, childId, status'),
+        supabase.from('sessions').select('id, child_id, status'),
+        supabase.from('concerns').select('id, child_id, status'),
       ]);
       if (childrenError || volunteersError || sessionsError || concernsError) {
         throw childrenError || volunteersError || sessionsError || concernsError;
@@ -85,14 +85,14 @@ export function IndiaMap({ data }: IndiaMapProps) {
       });
       // Sessions (by child state)
       (sessions || []).forEach((session) => {
-        const child = (children || []).find((c) => c.id === session.childId);
+        const child = (children || []).find((c) => c.id === session.child_id);
         if (!child || !child.state || !child.isActive) return;
         if (!stateMap[child.state]) return;
         stateMap[child.state].sessions += 1;
       });
       // Concerns (by child state)
       (concerns || []).forEach((concern) => {
-        const child = (children || []).find((c) => c.id === concern.childId);
+        const child = (children || []).find((c) => c.id === concern.child_id);
         if (!child || !child.state || !child.isActive) return;
         if (!stateMap[child.state]) return;
         stateMap[child.state].concerns += 1;

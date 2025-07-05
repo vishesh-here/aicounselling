@@ -22,11 +22,11 @@ function GET(request, { params }) {
             if (!(session === null || session === void 0 ? void 0 : session.user)) {
                 return server_1.NextResponse.json({ error: "Unauthorized" }, { status: 401 });
             }
-            const { childId } = params;
+            const { child_id } = params;
             // Get all conversations for this child with message counts
             const conversations = yield db_1.prisma.aiChatConversation.findMany({
                 where: {
-                    childId: childId,
+                    child_id: child_id,
                     isActive: true
                 },
                 include: {

@@ -69,7 +69,7 @@ export default function UserApprovalsPage() {
       // Fetch all users, then filter for volunteers in client
       const { data: allUsers, error: usersError } = await supabase
         .from('users')
-        .select('id, name, email, phone, state, specialization, experience, motivation, approval_status, rejection_reason, created_at, approved_by, approved_at, user_metadata, app_metadata');
+        .select('id, name, email, phone, state, specialization, experience, motivation, approval_status, rejection_reason, createdAt, approved_by, approved_at, user_metadata, app_metadata');
       if (usersError) toast.error(usersError.message);
       // Filter for volunteers using metadata
       const volunteers = (allUsers || []).filter(u => {

@@ -114,7 +114,7 @@ function POST(request) {
                     const memoryEntries = [];
                     if (summaryData.keyInsights) {
                         memoryEntries.push({
-                            childId: sessionRecord.childId,
+                            child_id: sessionRecord.child_id,
                             volunteerId: session.user.id,
                             sessionId: sessionId,
                             memoryType: "IMPORTANT_INSIGHT",
@@ -125,7 +125,7 @@ function POST(request) {
                     }
                     if (summaryData.breakthroughs) {
                         memoryEntries.push({
-                            childId: sessionRecord.childId,
+                            child_id: sessionRecord.child_id,
                             volunteerId: session.user.id,
                             sessionId: sessionId,
                             memoryType: "BREAKTHROUGH_MOMENT",
@@ -136,7 +136,7 @@ function POST(request) {
                     }
                     if (summaryData.challengesFaced) {
                         memoryEntries.push({
-                            childId: sessionRecord.childId,
+                            child_id: sessionRecord.child_id,
                             volunteerId: session.user.id,
                             sessionId: sessionId,
                             memoryType: "WARNING_SIGN",

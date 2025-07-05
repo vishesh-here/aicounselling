@@ -23,8 +23,8 @@ function POST(request) {
             if (!(session === null || session === void 0 ? void 0 : session.user)) {
                 return server_1.NextResponse.json({ error: "Unauthorized" }, { status: 401 });
             }
-            const { message, childId, sessionId, conversationId } = yield request.json();
-            if (!message || !childId || !sessionId) {
+            const { message, child_id, sessionId, conversationId } = yield request.json();
+            if (!message || !child_id || !sessionId) {
                 return server_1.NextResponse.json({
                     error: "Message, child ID, and session ID are required"
                 }, { status: 400 });
@@ -41,7 +41,7 @@ function POST(request) {
                 conversation = yield db_1.prisma.aiChatConversation.create({
                     data: {
                         sessionId,
-                        childId,
+                        child_id,
                         volunteerId: session.user.id,
                         conversationName: `Session Chat - ${new Date().toLocaleDateString()}`
                     },
@@ -52,7 +52,7 @@ function POST(request) {
             const ragContextResponse = yield fetch(`${process.env.NEXTAUTH_URL}/api/ai/rag-context`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ childId, sessionId, conversationId: conversation.id })
+                body: JSON.stringify({ child_id, sessionId, conversationId: conversation.id })
             });
             const { context: ragContext } = yield ragContextResponse.json();
             // Save user message
@@ -80,7 +80,7 @@ function POST(request) {
                 }
             });
             // Extract and store important insights as conversation memory
-            yield extractAndStoreMemory(aiResponse.content, message, childId, session.user.id, sessionId);
+            yield extractAndStoreMemory(aiResponse.content, message, child_id, session.user.id, sessionId);
             return server_1.NextResponse.json({
                 response: aiResponse.content,
                 conversationId: conversation.id,
@@ -231,7 +231,7 @@ ${(knowledge === null || knowledge === void 0 ? void 0 : knowledge.slice(0, 5).m
 
 Remember: You are here to support the volunteer in real-time during an active session. Your guidance should be immediately applicable and culturally appropriate for this specific child's context.`;
 }
-function extractAndStoreMemory(aiResponse, userMessage, childId, volunteerId, sessionId) {
+function extractAndStoreMemory(aiResponse, userMessage, child_id, volunteerId, sessionId) {
     return __awaiter(this, void 0, void 0, function* () {
         try {
             // Simple heuristics to identify important insights that should be stored as memory
@@ -269,7 +269,7 @@ function extractAndStoreMemory(aiResponse, userMessage, childId, volunteerId, se
                 }
                 yield db_1.prisma.conversationMemory.create({
                     data: {
-                        childId,
+                        child_id,
                         volunteerId,
                         sessionId,
                         memoryType: memoryType,

@@ -29,16 +29,16 @@ export default function DashboardStats() {
       const { data: childrenData, error: childrenError } = await supabase
         .from('children')
         .select('*, assignments(*), concerns(*), sessions(*)')
-        .eq('is_active', true);
+        .eq('isActive', true);
       if (childrenError) throw childrenError;
       // Fetch volunteers
       const { data: allUsers, error: usersError } = await supabase
         .from('users')
-        .select('id, user_metadata, app_metadata, approval_status, is_active');
+        .select('id, user_metadata, app_metadata, approval_status, isActive');
       if (usersError) throw usersError;
       const volunteers = (allUsers || []).filter(u => {
         const role = u.user_metadata?.role || u.app_metadata?.role;
-        return role === 'VOLUNTEER' && u.approval_status === 'APPROVED' && u.is_active;
+        return role === 'VOLUNTEER' && u.approval_status === 'APPROVED' && u.isActive;
       });
       // Fetch sessions
       const { data: sessionsData, error: sessionsError } = await supabase

@@ -758,7 +758,7 @@ function main() {
                 yield prisma.assignment.create({
                     data: {
                         volunteerId: volunteer.id,
-                        childId: createdChildren[i].id,
+                        child_id: createdChildren[i].id,
                         notes: `Assigned based on volunteer specialization in ${volunteer.specialization}`
                     }
                 });
@@ -787,7 +787,7 @@ function main() {
                 const randomTitle = titles[Math.floor(Math.random() * titles.length)];
                 yield prisma.concern.create({
                     data: {
-                        childId: randomChild.id,
+                        child_id: randomChild.id,
                         title: randomTitle,
                         description: `Detailed description of ${randomTitle.toLowerCase()} affecting ${randomChild.name}`,
                         category: randomCategory,
@@ -805,7 +805,7 @@ function main() {
             for (let i = 0; i < 25; i++) {
                 const randomChild = createdChildren[Math.floor(Math.random() * createdChildren.length)];
                 const assignment = yield prisma.assignment.findFirst({
-                    where: { childId: randomChild.id }
+                    where: { child_id: randomChild.id }
                 });
                 if (assignment) {
                     const randomType = sessionTypes[Math.floor(Math.random() * sessionTypes.length)];
@@ -813,7 +813,7 @@ function main() {
                     const baseDate = new Date(Date.now() - Math.random() * 60 * 24 * 60 * 60 * 1000); // Random date in last 60 days
                     const session = yield prisma.session.create({
                         data: {
-                            childId: randomChild.id,
+                            child_id: randomChild.id,
                             volunteerId: assignment.volunteerId,
                             scheduledAt: baseDate,
                             startedAt: randomStatus !== "PLANNED" ? baseDate : undefined,

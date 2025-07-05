@@ -33,7 +33,7 @@ import { toast } from "sonner";
 
 interface RichSessionSummaryProps {
   sessionId: string;
-  childId: string;
+  child_id: string;
   childName: string;
   sessionStartTime: Date;
   onSave: (summaryData: any) => void;
@@ -121,7 +121,7 @@ const COMMON_TOPICS = [
 
 export function RichSessionSummary({ 
   sessionId, 
-  childId, 
+  child_id, 
   childName, 
   sessionStartTime, 
   onSave, 

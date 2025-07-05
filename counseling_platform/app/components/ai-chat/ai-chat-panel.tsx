@@ -24,7 +24,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
 interface AiChatPanelProps {
-  childId: string;
+  child_id: string;
   sessionId: string;
   childName: string;
   isMinimized?: boolean;
@@ -45,7 +45,7 @@ interface ChatMessage {
 }
 
 export function AiChatPanel({ 
-  childId, 
+  child_id, 
   sessionId, 
   childName,
   isMinimized = false,
@@ -111,7 +111,7 @@ export function AiChatPanel({
         },
         body: JSON.stringify({
           message: messageContent,
-          childId,
+          child_id,
           sessionId,
           conversationId
         })

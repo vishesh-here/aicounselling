@@ -23,12 +23,12 @@ const lucide_react_1 = require("lucide-react");
 const link_1 = __importDefault(require("next/link"));
 const session_interface_1 = require("@/components/session/session-interface");
 exports.dynamic = "force-dynamic";
-function getSessionData(childId, userRole, userId) {
+function getSessionData(child_id, userRole, userId) {
     return __awaiter(this, void 0, void 0, function* () {
         // Check if there's an active session for this child
         let activeSession = yield db_1.prisma.session.findFirst({
             where: {
-                childId: childId,
+                child_id: child_id,
                 status: { in: ["PLANNED", "IN_PROGRESS"] }
             },
             include: {
@@ -57,7 +57,7 @@ function getSessionData(childId, userRole, userId) {
         });
         // Get child data for access control
         const child = yield db_1.prisma.child.findUnique({
-            where: { id: childId, isActive: true },
+            where: { id: child_id, isActive: true },
             include: {
                 assignments: {
                     include: {

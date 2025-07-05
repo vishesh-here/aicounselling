@@ -751,7 +751,7 @@ async function main() {
       await prisma.assignment.create({
         data: {
           volunteerId: volunteer.id,
-          childId: createdChildren[i].id,
+          child_id: createdChildren[i].id,
           notes: `Assigned based on volunteer specialization in ${volunteer.specialization}`
         }
       });
@@ -785,7 +785,7 @@ async function main() {
       
       await prisma.concern.create({
         data: {
-          childId: randomChild.id,
+          child_id: randomChild.id,
           title: randomTitle,
           description: `Detailed description of ${randomTitle.toLowerCase()} affecting ${randomChild.name}`,
           category: randomCategory as any,
@@ -805,7 +805,7 @@ async function main() {
     for (let i = 0; i < 25; i++) {
       const randomChild = createdChildren[Math.floor(Math.random() * createdChildren.length)];
       const assignment = await prisma.assignment.findFirst({
-        where: { childId: randomChild.id }
+        where: { child_id: randomChild.id }
       });
       
       if (assignment) {
@@ -815,7 +815,7 @@ async function main() {
         
         const session = await prisma.session.create({
           data: {
-            childId: randomChild.id,
+            child_id: randomChild.id,
             volunteerId: assignment.volunteerId,
             scheduledAt: baseDate,
             startedAt: randomStatus !== "PLANNED" ? baseDate : undefined,

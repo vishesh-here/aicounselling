@@ -68,20 +68,20 @@ model Child {
 model Assignment {
   id          String   @id @default(cuid())
   volunteerId String
-  childId     String
+  child_id     String
   assignedAt  DateTime @default(now())
   isActive    Boolean  @default(true)
   notes       String?
-  child       Child    @relation(fields: [childId], references: [id], onDelete: Cascade)
+  child       Child    @relation(fields: [child_id], references: [id], onDelete: Cascade)
   volunteer   User     @relation(fields: [volunteerId], references: [id], onDelete: Cascade)
 
-  @@unique([volunteerId, childId])
+  @@unique([volunteerId, child_id])
   @@map("assignments")
 }
 
 model Session {
   id                   String                 @id @default(cuid())
-  childId              String
+  child_id              String
   volunteerId          String
   scheduledAt          DateTime?
   startedAt            DateTime?
@@ -95,7 +95,7 @@ model Session {
   aiChatConversations  AiChatConversation[]
   conversationMemories ConversationMemory[]
   summary              SessionSummary?
-  child                Child                  @relation(fields: [childId], references: [id], onDelete: Cascade)
+  child                Child                  @relation(fields: [child_id], references: [id], onDelete: Cascade)
   volunteer            User                   @relation(fields: [volunteerId], references: [id], onDelete: Cascade)
 
   @@map("sessions")
@@ -221,7 +221,7 @@ model CulturalStory {
 
 model Concern {
   id           String          @id @default(cuid())
-  childId      String
+  child_id      String
   title        String
   description  String
   category     ConcernCategory
@@ -232,7 +232,7 @@ model Concern {
   resolution   String?
   createdAt    DateTime        @default(now())
   updatedAt    DateTime        @updatedAt
-  child        Child           @relation(fields: [childId], references: [id], onDelete: Cascade)
+  child        Child           @relation(fields: [child_id], references: [id], onDelete: Cascade)
 
   @@map("concerns")
 }
@@ -255,7 +255,7 @@ model ChatMessage {
 model AiChatConversation {
   id               String               @id @default(cuid())
   sessionId        String
-  childId          String
+  child_id          String
   volunteerId      String
   conversationName String?
   context          Json?                // Stores comprehensive RAG context
@@ -263,7 +263,7 @@ model AiChatConversation {
   createdAt        DateTime             @default(now())
   updatedAt        DateTime             @updatedAt
   session          Session              @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  child            Child                @relation(fields: [childId], references: [id], onDelete: Cascade)
+  child            Child                @relation(fields: [child_id], references: [id], onDelete: Cascade)
   volunteer        User                 @relation(fields: [volunteerId], references: [id], onDelete: Cascade)
   messages         AiChatMessage[]
   
@@ -285,7 +285,7 @@ model AiChatMessage {
 
 model ConversationMemory {
   id              String    @id @default(cuid())
-  childId         String
+  child_id         String
   volunteerId     String
   sessionId       String?
   memoryType      MemoryType
@@ -295,7 +295,7 @@ model ConversationMemory {
   expiresAt       DateTime?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
-  child           Child     @relation(fields: [childId], references: [id], onDelete: Cascade)
+  child           Child     @relation(fields: [child_id], references: [id], onDelete: Cascade)
   volunteer       User      @relation(fields: [volunteerId], references: [id], onDelete: Cascade)
   session         Session?  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   

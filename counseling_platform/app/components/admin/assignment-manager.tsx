@@ -35,25 +35,25 @@ export function AssignmentManager() {
       const { data: childrenData, error: childrenError } = await supabase
         .from('children')
         .select('*, assignments(*, volunteer:users(id, name, specialization)), concerns(*)')
-        .eq('is_active', true);
+        .eq('isActive', true);
       if (childrenError) toast.error(childrenError.message);
       console.log('Fetched children:', childrenData);
       setChildren(childrenData || []);
       // Fetch all users, then filter for volunteers in client
       const { data: allUsers, error: usersError } = await supabase
         .from('users')
-        .select('id, name, email, specialization, state, user_metadata, app_metadata, approval_status, is_active');
+        .select('id, name, email, specialization, state, user_metadata, app_metadata, approval_status, isActive');
       if (usersError) toast.error(usersError.message);
       const volunteersData = (allUsers || []).filter(u => {
         const role = u.user_metadata?.role || u.app_metadata?.role;
-        return role === 'VOLUNTEER' && u.approval_status === 'APPROVED' && u.is_active;
+        return role === 'VOLUNTEER' && u.approval_status === 'APPROVED' && u.isActive;
       });
       console.log('Fetched volunteers:', volunteersData);
       setVolunteers(volunteersData);
       const { data: assignmentsData, error: assignmentsError } = await supabase
         .from('assignments')
-        .select('*, child_id, volunteer_id')
-        .eq('is_active', true);
+        .select('*, child_id, volunteerId')
+        .eq('isActive', true);
       if (assignmentsError) toast.error(assignmentsError.message);
       console.log('Fetched assignments:', assignmentsData);
       setAssignments(assignmentsData || []);
@@ -77,11 +77,11 @@ export function AssignmentManager() {
   const uniqueStates = [...new Set(children.map(child => child.state))].sort();
 
   // Assign volunteer to child
-  const assignVolunteer = async (childId: string, volunteerId: string) => {
+  const assignVolunteer = async (child_id: string, volunteerId: string) => {
     setIsAssigning(true);
     const { data, error } = await supabase
       .from('assignments')
-      .insert([{ child_id: childId, volunteer_id: volunteerId, is_active: true }]);
+      .insert([{ child_id: child_id, volunteerId: volunteerId, isActive: true }]);
     if (error) {
       toast.error(error.message || 'Failed to create assignment');
     } else {
@@ -90,7 +90,7 @@ export function AssignmentManager() {
       const { data: assignmentsData } = await supabase
         .from('assignments')
         .select('*')
-        .eq('is_active', true);
+        .eq('isActive', true);
       setAssignments(assignmentsData || []);
     }
     setIsAssigning(false);
@@ -100,7 +100,7 @@ export function AssignmentManager() {
   const removeAssignment = async (assignmentId: string) => {
     const { data, error } = await supabase
       .from('assignments')
-      .update({ is_active: false })
+      .update({ isActive: false })
       .eq('id', assignmentId);
     if (error) {
       toast.error(error.message || 'Failed to remove assignment');
@@ -110,7 +110,7 @@ export function AssignmentManager() {
       const { data: assignmentsData } = await supabase
         .from('assignments')
         .select('*')
-        .eq('is_active', true);
+        .eq('isActive', true);
       setAssignments(assignmentsData || []);
     }
   };

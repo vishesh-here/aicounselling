@@ -27,11 +27,11 @@ const profile_details_1 = require("@/components/children/profile-details");
 const link_1 = __importDefault(require("next/link"));
 const date_fns_1 = require("date-fns");
 exports.dynamic = "force-dynamic";
-function getChildData(childId, userRole, userId) {
+function getChildData(child_id, userRole, userId) {
     return __awaiter(this, void 0, void 0, function* () {
         // Check access permissions
         const child = yield db_1.prisma.child.findUnique({
-            where: { id: childId, isActive: true },
+            where: { id: child_id, isActive: true },
             include: {
                 assignments: {
                     include: {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { AlertCircle, Loader2, Plus, X } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { supabase } from '@/lib/supabaseClient';
 
 const INDIAN_STATES = [
   "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh", "Goa", "Gujarat",
@@ -74,6 +75,35 @@ export default function AddChildPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [newInterest, setNewInterest] = useState('');
   const [newChallenge, setNewChallenge] = useState('');
+  const [session, setSession] = useState<any>(null);
+
+  useEffect(() => {
+    const getSession = async () => {
+      const { data } = await supabase.auth.getSession();
+      setSession(data.session);
+    };
+    getSession();
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+    });
+    return () => {
+      listener?.subscription.unsubscribe();
+    };
+  }, []);
+
+  const userRole = session?.user?.user_metadata?.role || session?.user?.app_metadata?.role;
+  if (userRole !== 'ADMIN') {
+    return (
+      <div className="p-6">
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            You don't have permission to add child profiles. Only administrators can perform this action.
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
 
   const validateForm = (): boolean => {
     const newErrors: FormErrors = {};
@@ -163,56 +193,39 @@ export default function AddChildPage() {
     setIsLoading(true);
 
     try {
+      const now = new Date().toISOString();
+      const payload = {
+        ...formData,
+        age: parseInt(formData.age),
+        interests: formData.interests,
+        challenges: formData.challenges,
+        isActive: true,
+        createdAt: now,
+        updatedAt: now
+      };
       const response = await fetch('/api/children', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-          name: formData.name.trim(),
-          age: parseInt(formData.age),
-          gender: formData.gender,
-          state: formData.state,
-          district: formData.district.trim(),
-          background: formData.background.trim(),
-          schoolLevel: formData.schoolLevel.trim(),
-          interests: formData.interests,
-          challenges: formData.challenges,
-          language: formData.language
-        })
+        body: JSON.stringify(payload)
       });
-
       const result = await response.json();
-
       if (response.ok) {
         router.push('/children?message=child-added');
+      } else if (result.errors) {
+        setErrors(result.errors);
+      } else if (result.error) {
+        setErrors({ general: result.error });
       } else {
-        if (result.errors) {
-          setErrors(result.errors);
-        } else {
-          setErrors({ general: result.error || 'Failed to add child profile' });
-        }
+        setErrors({ general: 'Failed to add child profile' });
       }
     } catch (error) {
-      console.error('Add child error:', error);
       setErrors({ general: 'Something went wrong. Please try again.' });
     } finally {
       setIsLoading(false);
     }
   };
-
-  if (session?.user?.role !== 'ADMIN') {
-    return (
-      <div className="p-6">
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>
-            You don't have permission to add child profiles. Only administrators can perform this action.
-          </AlertDescription>
-        </Alert>
-      </div>
-    );
-  }
 
   return (
     <div className="p-6 max-w-4xl mx-auto">

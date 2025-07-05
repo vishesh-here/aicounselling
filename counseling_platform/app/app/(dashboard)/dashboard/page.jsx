@@ -52,7 +52,7 @@ function getDashboardData(userRole, userId) {
         co.category,
         COUNT(co.id) as count
       FROM "children" c
-      JOIN "concerns" co ON c.id = co."childId"
+      JOIN "concerns" co ON c.id = co."child_id"
       WHERE c."isActive" = true
       GROUP BY age_group, co.category
       ORDER BY age_group, co.category
@@ -83,12 +83,12 @@ function getDashboardData(userRole, userId) {
                 where: { volunteerId: userId, isActive: true },
                 include: { child: true }
             });
-            const assignedChildIds = assignments.map(a => a.childId);
+            const assignedchild_ids = assignments.map(a => a.child_id);
             const [mySessions, myOpenConcerns] = yield Promise.all([
                 db_1.prisma.session.count({ where: { volunteerId: userId } }),
                 db_1.prisma.concern.count({
                     where: {
-                        childId: { in: assignedChildIds },
+                        child_id: { in: assignedchild_ids },
                         status: { not: "RESOLVED" }
                     }
                 })

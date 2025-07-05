@@ -1,3 +1,4 @@
+"use client";
 import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
@@ -30,13 +31,13 @@ export default function SessionPage() {
         const role = user.user_metadata?.role || user.app_metadata?.role || "VOLUNTEER";
         setUserRole(role);
         setUserId(user.id);
-        // Get childId from params
-        const childId = params?.id as string;
+        // Get child_id from params
+        const child_id = params?.id as string;
         // Fetch child data
         const { data: child, error: childError } = await supabase
-          .from("child")
+          .from("children")
           .select("*, assignments(*), concerns(*), isActive")
-          .eq("id", childId)
+          .eq("id", child_id)
           .maybeSingle();
         if (childError || !child) throw childError || new Error("Child not found");
         setChildData(child);
@@ -49,9 +50,9 @@ export default function SessionPage() {
         }
         // Fetch active session for this child
         const { data: activeSession, error: sessionFetchError } = await supabase
-          .from("session")
+          .from("sessions")
           .select("*")
-          .eq("childId", childId)
+          .eq("child_id", child_id)
           .in("status", ["PLANNED", "IN_PROGRESS"])
           .maybeSingle();
         if (sessionFetchError) throw sessionFetchError;

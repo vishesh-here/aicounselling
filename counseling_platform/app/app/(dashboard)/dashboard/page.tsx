@@ -37,7 +37,7 @@ export default function DashboardPage() {
         let assignmentsData: any[] = [];
         if (role === "VOLUNTEER") {
           const { data: assign, error: assignError } = await supabase
-            .from("assignment")
+            .from("assignments")
             .select("*, child(*)")
             .eq("volunteerId", user.id)
             .eq("isActive", true);
@@ -49,7 +49,7 @@ export default function DashboardPage() {
         let sessionsData: any[] = [];
         if (role === "VOLUNTEER") {
           const { data: sessions, error: sessionsError } = await supabase
-            .from("session")
+            .from("sessions")
             .select("*, child(name, age), summary(resolutionStatus)")
             .eq("volunteerId", user.id)
             .order("createdAt", { ascending: false })

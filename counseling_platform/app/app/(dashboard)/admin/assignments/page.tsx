@@ -36,26 +36,26 @@ export default function AssignmentsPage() {
       const { data: childrenData, error: childrenError } = await supabase
         .from('children')
         .select('*, assignments(*, volunteer:users(id, name, specialization)), concerns(*)')
-        .eq('is_active', true);
+        .eq('isActive', true);
       if (childrenError) throw childrenError;
       console.log('Fetched children:', childrenData);
       setChildren(childrenData || []);
       // Fetch all users, then filter for volunteers in client
       const { data: allUsers, error: usersError } = await supabase
         .from('users')
-        .select('id, name, email, specialization, state, user_metadata, app_metadata, approval_status, is_active');
+        .select('id, name, email, specialization, state, user_metadata, app_metadata, approval_status, isActive');
       if (usersError) throw usersError;
       const volunteersData = (allUsers || []).filter(u => {
         const role = u.user_metadata?.role || u.app_metadata?.role;
-        return role === 'VOLUNTEER' && u.approval_status === 'APPROVED' && u.is_active;
+        return role === 'VOLUNTEER' && u.approval_status === 'APPROVED' && u.isActive;
       });
       console.log('Fetched volunteers:', volunteersData);
       setVolunteers(volunteersData);
       // Fetch assignments
       const { data: assignmentsData, error: assignmentsError } = await supabase
         .from('assignments')
-        .select('*, child_id, volunteer_id')
-        .eq('is_active', true);
+        .select('*, child_id, volunteerId')
+        .eq('isActive', true);
       if (assignmentsError) throw assignmentsError;
       console.log('Fetched assignments:', assignmentsData);
       setAssignments(assignmentsData || []);

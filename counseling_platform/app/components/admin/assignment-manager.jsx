@@ -39,7 +39,7 @@ function AssignmentManager({ children, volunteers, assignments }) {
     // Get unique states for filter
     const uniqueStates = [...new Set(children.map(child => child.state))].sort();
     // Assign volunteer to child
-    const assignVolunteer = (childId, volunteerId) => __awaiter(this, void 0, void 0, function* () {
+    const assignVolunteer = (child_id, volunteerId) => __awaiter(this, void 0, void 0, function* () {
         setIsAssigning(true);
         try {
             const response = yield fetch("/api/admin/assignments", {
@@ -47,7 +47,7 @@ function AssignmentManager({ children, volunteers, assignments }) {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     action: "assign",
-                    childId,
+                    child_id,
                     volunteerId
                 })
             });

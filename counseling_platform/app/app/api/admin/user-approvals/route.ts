@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
   // Fetch all volunteers for approval management
   const { data, error } = await supabase
     .from('users')
-    .select('id, name, email, phone, state, specialization, experience, motivation, approval_status, rejection_reason, created_at, approved_by, approved_at')
+    .select('id, name, email, phone, state, specialization, experience, motivation, approval_status, rejection_reason, createdAt, approved_by, approved_at')
     .eq('role', 'VOLUNTEER');
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
