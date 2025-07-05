@@ -1,65 +1,33 @@
-
-export const dynamic = "force-dynamic";
-
+import { createClient } from '@supabase/supabase-js';
+import { cookies } from 'next/headers';
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth-config';
-import { PrismaClient } from '@prisma/client';
 
-const prisma = new PrismaClient();
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
-// GET - Fetch all users for approval management
-export async function GET() {
-  try {
-    const session = await getServerSession(authOptions);
+function getSupabase(req: NextRequest) {
+  const cookieStore = cookies();
+  const supabase = createClient(supabaseUrl, supabaseKey, {
+    global: { headers: { Cookie: cookieStore.toString() } },
+  });
+  return supabase;
+}
 
-    if (!session?.user || session.user.role !== 'ADMIN') {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const users = await prisma.user.findMany({
-      where: {
-        role: 'VOLUNTEER'
-      },
-      include: {
-        approver: {
-          select: {
-            name: true
-          }
-        }
-      },
-      orderBy: [
-        { approvalStatus: 'asc' }, // PENDING first
-        { createdAt: 'desc' }
-      ]
-    });
-
-    // Remove sensitive data before sending
-    const sanitizedUsers = users.map(user => ({
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      phone: user.phone,
-      state: user.state,
-      specialization: user.specialization,
-      experience: user.experience,
-      motivation: user.motivation,
-      approvalStatus: user.approvalStatus,
-      rejectionReason: user.rejectionReason,
-      createdAt: user.createdAt,
-      approvedBy: user.approvedBy,
-      approvedAt: user.approvedAt,
-      approver: user.approver
-    }));
-
-    return NextResponse.json({ users: sanitizedUsers });
-
-  } catch (error) {
-    console.error('Error fetching users:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
-  } finally {
-    await prisma.$disconnect();
+export async function GET(request: NextRequest) {
+  const supabase = getSupabase(request);
+  const { data: { user }, error: userError } = await supabase.auth.getUser();
+  if (!user || user.user_metadata.role !== 'ADMIN') {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
+  // Fetch all volunteers for approval management
+  const { data, error } = await supabase
+    .from('users')
+    .select('id, name, email, phone, state, specialization, experience, motivation, approval_status, rejection_reason, created_at, approved_by, approved_at')
+    .eq('role', 'VOLUNTEER');
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+  return NextResponse.json({ users: data });
 }
 
 // POST - Approve or reject a user

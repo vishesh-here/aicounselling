@@ -1,88 +1,40 @@
-
-export const dynamic = "force-dynamic";
-
+import { createClient } from '@supabase/supabase-js';
+import { cookies } from 'next/headers';
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth-config';
-import { PrismaClient } from '@prisma/client';
 
-const prisma = new PrismaClient();
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+
+function getSupabase(req: NextRequest) {
+  const cookieStore = cookies();
+  const supabase = createClient(supabaseUrl, supabaseKey, {
+    global: { headers: { Cookie: cookieStore.toString() } },
+  });
+  return supabase;
+}
 
 // GET - Fetch a specific child by ID
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
-  try {
-    const session = await getServerSession(authOptions);
-
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const { id } = params;
-
-    // Build filter conditions based on user role
-    const where: any = {
-      id: id,
-      isActive: true
-    };
-
-    // For volunteers, only show assigned children
-    if (session.user.role === 'VOLUNTEER') {
-      where.assignments = {
-        some: {
-          volunteerId: session.user.id,
-          isActive: true
-        }
-      };
-    }
-
-    const child = await prisma.child.findFirst({
-      where,
-      include: {
-        assignments: {
-          where: { isActive: true },
-          include: {
-            volunteer: {
-              select: {
-                id: true,
-                name: true,
-                specialization: true
-              }
-            }
-          }
-        },
-        concerns: {
-          where: { status: { not: 'CLOSED' } },
-          orderBy: { createdAt: 'desc' }
-        },
-        sessions: {
-          orderBy: { createdAt: 'desc' },
-          include: {
-            volunteer: {
-              select: {
-                name: true
-              }
-            },
-            summary: true
-          }
-        }
-      }
-    });
-
-    if (!child) {
-      return NextResponse.json({ error: 'Child not found' }, { status: 404 });
-    }
-
-    return NextResponse.json({ child });
-
-  } catch (error) {
-    console.error('Error fetching child:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
-  } finally {
-    await prisma.$disconnect();
+export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
+  const supabase = getSupabase(request);
+  const { data: { user }, error: userError } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
+  // If volunteer, only show assigned children
+  let query = supabase
+    .from('children')
+    .select('*, assignments(*, volunteer:users(id, name, specialization)), concerns(*), sessions(*)')
+    .eq('id', params.id)
+    .eq('is_active', true)
+    .single();
+  if (user.user_metadata.role === 'VOLUNTEER') {
+    query = query.contains('assignments', [{ volunteer_id: user.id, is_active: true }]);
+  }
+  const { data, error } = await query;
+  if (error || !data) {
+    return NextResponse.json({ error: error?.message || 'Child not found' }, { status: 404 });
+  }
+  return NextResponse.json({ child: data });
 }
 
 // PUT - Update a child profile

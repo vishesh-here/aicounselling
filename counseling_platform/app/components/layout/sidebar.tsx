@@ -75,17 +75,24 @@ export function Sidebar({ className }: SidebarProps) {
     const getSession = async () => {
       const { data } = await supabase.auth.getSession();
       setSession(data.session);
+      if (data.session?.user) {
+        console.log('Sidebar user:', data.session.user);
+      }
     };
     getSession();
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
+      if (session?.user) {
+        console.log('Sidebar user (auth change):', session.user);
+      }
     });
     return () => {
       listener?.subscription.unsubscribe();
     };
   }, []);
 
-  const isAdmin = session?.user?.user_metadata?.role === "ADMIN";
+  const userRole = session?.user?.user_metadata?.role || session?.user?.app_metadata?.role;
+  const isAdmin = userRole === "ADMIN";
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
@@ -185,7 +192,7 @@ export function Sidebar({ className }: SidebarProps) {
                 {session?.user?.email || "User"}
               </p>
               <p className="text-xs text-slate-400 truncate">
-                {session?.user?.user_metadata?.role?.toLowerCase() || "volunteer"}
+                {(session?.user?.user_metadata?.role || session?.user?.app_metadata?.role || "volunteer").toLowerCase()}
               </p>
             </div>
           )}

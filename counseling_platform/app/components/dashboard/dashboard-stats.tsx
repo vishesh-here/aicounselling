@@ -3,143 +3,109 @@
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Users, Calendar, BookOpen, TrendingUp, Heart, UserCheck } from "lucide-react";
+import { createClient } from '@supabase/supabase-js';
 
-interface DashboardStatsProps {
-  data: any;
-  userRole: string;
-}
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+const supabase = createClient(supabaseUrl, supabaseKey);
 
-export function DashboardStats({ data, userRole }: DashboardStatsProps) {
-  const [animatedStats, setAnimatedStats] = useState<any>({});
+export default function DashboardStats() {
+  const [stats, setStats] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
-    const stats = userRole === "ADMIN" ? data.stats : data.stats;
-    const keys = Object.keys(stats || {});
-    const timers: NodeJS.Timeout[] = [];
-
-    if (!keys.length) {
-      return;
-    }
-    
-    keys.forEach((key) => {
-      const finalValue = stats[key];
-      let currentValue = 0;
-      const increment = Math.ceil(finalValue / 50);
-      
-      const timer = setInterval(() => {
-        currentValue += increment;
-        if (currentValue >= finalValue) {
-          currentValue = finalValue;
-          clearInterval(timer);
-        }
-        
-        setAnimatedStats((prev: any) => ({
-          ...prev,
-          [key]: currentValue
-        }));
-      }, 30);
-      timers.push(timer);
-    });
-
-    // Cleanup: clear all timers
-    return () => {
-      timers.forEach(clearInterval);
+    const fetchStats = async () => {
+      setLoading(true);
+      const { data: { user } } = await supabase.auth.getUser();
+      const role = user?.user_metadata?.role || user?.app_metadata?.role;
+      if (!user || role !== 'ADMIN') {
+        setIsAdmin(false);
+        setLoading(false);
+        return;
+      }
+      setIsAdmin(true);
+      // Fetch children
+      const { data: childrenData, error: childrenError } = await supabase
+        .from('children')
+        .select('*, assignments(*), concerns(*), sessions(*)')
+        .eq('is_active', true);
+      if (childrenError) throw childrenError;
+      // Fetch volunteers
+      const { data: allUsers, error: usersError } = await supabase
+        .from('users')
+        .select('id, user_metadata, app_metadata, approval_status, is_active');
+      if (usersError) throw usersError;
+      const volunteers = (allUsers || []).filter(u => {
+        const role = u.user_metadata?.role || u.app_metadata?.role;
+        return role === 'VOLUNTEER' && u.approval_status === 'APPROVED' && u.is_active;
+      });
+      // Fetch sessions
+      const { data: sessionsData, error: sessionsError } = await supabase
+        .from('sessions')
+        .select('*');
+      if (sessionsError) throw sessionsError;
+      // Aggregate stats
+      setStats({
+        totalChildren: childrenData.length,
+        assignedChildren: childrenData.filter(child => child.assignments && child.assignments.length > 0).length,
+        unassignedChildren: childrenData.filter(child => !child.assignments || child.assignments.length === 0).length,
+        totalVolunteers: volunteers.length,
+        activeAssignments: childrenData.reduce((acc, child) => acc + (child.assignments ? child.assignments.length : 0), 0),
+        totalSessions: sessionsData.length,
+        // Add more stats as needed
+      });
+      setLoading(false);
     };
-  }, [data.stats, userRole]);
+    fetchStats();
+  }, []);
 
-  if (userRole === "ADMIN") {
-    return (
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <Card className="card-hover">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Children</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold count-up">{animatedStats.totalChildren || 0}</div>
-            <p className="text-xs text-muted-foreground">Active profiles</p>
-          </CardContent>
-        </Card>
-
-        <Card className="card-hover">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Volunteers</CardTitle>
-            <UserCheck className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold count-up">{animatedStats.totalVolunteers || 0}</div>
-            <p className="text-xs text-muted-foreground">Active volunteers</p>
-          </CardContent>
-        </Card>
-
-        <Card className="card-hover">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Sessions</CardTitle>
-            <Calendar className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold count-up">{animatedStats.totalSessions || 0}</div>
-            <p className="text-xs text-muted-foreground">Counseling sessions</p>
-          </CardContent>
-        </Card>
-
-        <Card className="card-hover">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Resolution Rate</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold count-up">{animatedStats.resolutionRate || 0}%</div>
-            <p className="text-xs text-muted-foreground">Concerns resolved</p>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
+  if (loading) return <div>Loading...</div>;
+  if (!isAdmin) return <div>Unauthorized</div>;
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
       <Card className="card-hover">
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">My Children</CardTitle>
+          <CardTitle className="text-sm font-medium">Total Children</CardTitle>
           <Users className="h-4 w-4 text-muted-foreground" />
         </CardHeader>
         <CardContent>
-          <div className="text-2xl font-bold count-up">{animatedStats.myChildren || 0}</div>
-          <p className="text-xs text-muted-foreground">Assigned to me</p>
+          <div className="text-2xl font-bold count-up">{stats?.totalChildren || 0}</div>
+          <p className="text-xs text-muted-foreground">Active profiles</p>
         </CardContent>
       </Card>
 
       <Card className="card-hover">
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">My Sessions</CardTitle>
+          <CardTitle className="text-sm font-medium">Volunteers</CardTitle>
+          <UserCheck className="h-4 w-4 text-muted-foreground" />
+        </CardHeader>
+        <CardContent>
+          <div className="text-2xl font-bold count-up">{stats?.totalVolunteers || 0}</div>
+          <p className="text-xs text-muted-foreground">Active volunteers</p>
+        </CardContent>
+      </Card>
+
+      <Card className="card-hover">
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardTitle className="text-sm font-medium">Total Sessions</CardTitle>
           <Calendar className="h-4 w-4 text-muted-foreground" />
         </CardHeader>
         <CardContent>
-          <div className="text-2xl font-bold count-up">{animatedStats.mySessions || 0}</div>
-          <p className="text-xs text-muted-foreground">Total conducted</p>
+          <div className="text-2xl font-bold count-up">{stats?.totalSessions || 0}</div>
+          <p className="text-xs text-muted-foreground">Counseling sessions</p>
         </CardContent>
       </Card>
 
       <Card className="card-hover">
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Open Cases</CardTitle>
-          <Heart className="h-4 w-4 text-muted-foreground" />
+          <CardTitle className="text-sm font-medium">Resolution Rate</CardTitle>
+          <TrendingUp className="h-4 w-4 text-muted-foreground" />
         </CardHeader>
         <CardContent>
-          <div className="text-2xl font-bold count-up">{animatedStats.myOpenConcerns || 0}</div>
-          <p className="text-xs text-muted-foreground">Needs attention</p>
-        </CardContent>
-      </Card>
-
-      <Card className="card-hover">
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Upcoming</CardTitle>
-          <Calendar className="h-4 w-4 text-muted-foreground" />
-        </CardHeader>
-        <CardContent>
-          <div className="text-2xl font-bold count-up">{animatedStats.upcomingSessions || 0}</div>
-          <p className="text-xs text-muted-foreground">Scheduled sessions</p>
+          <div className="text-2xl font-bold count-up">{stats?.sessionsByState?.resolutionRate || 0}%</div>
+          <p className="text-xs text-muted-foreground">Concerns resolved</p>
         </CardContent>
       </Card>
     </div>

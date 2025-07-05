@@ -26,7 +26,9 @@ export default function SessionPage() {
         const { data: sessionObj, error: sessionError } = await supabase.auth.getSession();
         if (sessionError || !sessionObj.session) throw sessionError || new Error("No session");
         const user = sessionObj.session.user;
-        setUserRole(user.user_metadata?.role || "VOLUNTEER");
+        console.log('SessionPage user:', user);
+        const role = user.user_metadata?.role || user.app_metadata?.role || "VOLUNTEER";
+        setUserRole(role);
         setUserId(user.id);
         // Get childId from params
         const childId = params?.id as string;
@@ -39,7 +41,7 @@ export default function SessionPage() {
         if (childError || !child) throw childError || new Error("Child not found");
         setChildData(child);
         // Access control for volunteers
-        if (user.user_metadata?.role === "VOLUNTEER") {
+        if (role === "VOLUNTEER") {
           const hasAccess = (child.assignments || []).some(
             (assignment: any) => assignment.volunteerId === user.id && assignment.isActive
           );

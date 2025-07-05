@@ -30,6 +30,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import Link from 'next/link';
+import { createClient } from '@supabase/supabase-js';
 
 interface Child {
   id: string;
@@ -81,6 +82,10 @@ const INDIAN_STATES = [
   "Uttarakhand", "West Bengal", "Delhi", "Jammu and Kashmir", "Ladakh"
 ];
 
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+const supabase = createClient(supabaseUrl, supabaseKey);
+
 export default function ChildrenPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -115,30 +120,28 @@ export default function ChildrenPage() {
   const fetchChildren = async () => {
     try {
       setLoading(true);
-      const params = new URLSearchParams();
-      
-      if (searchTerm) params.append('search', searchTerm);
-      if (stateFilter && stateFilter !== 'All States') params.append('state', stateFilter);
-      if (genderFilter && genderFilter !== 'All') params.append('gender', genderFilter);
+      // Fetch all children from Supabase
+      const { data: allChildren, error } = await supabase
+        .from('children')
+        .select('*, assignments(*, volunteer:users(id, name, specialization)), concerns(*), sessions(*)')
+        .eq('isActive', true);
+      if (error) throw error;
+      console.log('Fetched children:', allChildren);
+      let filtered = allChildren || [];
+      // Apply filters in client
+      if (searchTerm) filtered = filtered.filter(child => child.name.toLowerCase().includes(searchTerm.toLowerCase()));
+      if (stateFilter && stateFilter !== 'All States') filtered = filtered.filter(child => child.state === stateFilter);
+      if (genderFilter && genderFilter !== 'All') filtered = filtered.filter(child => child.gender === genderFilter);
       if (ageFilter && ageFilter !== 'All') {
         const [min, max] = ageFilter.split('-');
-        if (min) params.append('ageMin', min);
-        if (max) params.append('ageMax', max);
+        filtered = filtered.filter(child => {
+          if (min && child.age < parseInt(min)) return false;
+          if (max && child.age > parseInt(max)) return false;
+          return true;
+        });
       }
-      
-      // For volunteers, add assignment filtering
-      if (showAssignedOnly) {
-        params.append('assignedOnly', 'true');
-      }
-
-      const response = await fetch(`/api/children?${params.toString()}`);
-      if (response.ok) {
-        const data = await response.json();
-        setChildren(data.children);
-      } else {
-        console.error('Failed to fetch children');
-        toast.error('Failed to load children profiles');
-      }
+      if (showAssignedOnly) filtered = filtered.filter(child => child.assignments && child.assignments.length > 0);
+      setChildren(filtered);
     } catch (error) {
       console.error('Error fetching children:', error);
       toast.error('Something went wrong while loading profiles');

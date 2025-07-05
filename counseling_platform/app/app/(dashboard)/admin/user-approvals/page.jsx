@@ -125,14 +125,18 @@ function UserApprovalsPage() {
     const approvedUsers = users.filter(u => u.approvalStatus === 'APPROVED');
     const rejectedUsers = users.filter(u => u.approvalStatus === 'REJECTED');
     if (((_a = session === null || session === void 0 ? void 0 : session.user) === null || _a === void 0 ? void 0 : _a.role) !== 'ADMIN') {
-        return (<div className="p-6">
-        <alert_1.Alert variant="destructive">
-          <lucide_react_1.AlertCircle className="h-4 w-4"/>
-          <alert_1.AlertDescription>
-            You don't have permission to access this page.
-          </alert_1.AlertDescription>
-        </alert_1.Alert>
-      </div>);
+        console.log('User Approvals (JSX) user:', session?.user);
+        const userRole = session?.user?.user_metadata?.role || session?.user?.app_metadata?.role;
+        if (userRole !== 'ADMIN') {
+            return (<div className="p-6">
+            <alert_1.Alert variant="destructive">
+              <lucide_react_1.AlertCircle className="h-4 w-4"/>
+              <alert_1.AlertDescription>
+                You don't have permission to access this page.
+              </alert_1.AlertDescription>
+            </alert_1.Alert>
+          </div>);
+        }
     }
     if (loading) {
         return (<div className="p-6">

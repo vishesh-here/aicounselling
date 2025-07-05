@@ -1,89 +1,68 @@
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth-config";
-import { prisma } from "@/lib/db";
+'use client';
+import { createClient } from '@supabase/supabase-js';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { AssignmentManager } from "@/components/admin/assignment-manager";
 import { AlertTriangle } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { useState, useEffect } from "react";
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 export const dynamic = "force-dynamic";
 
-async function getAssignmentData() {
-  const [children, volunteers, assignments] = await Promise.all([
-    prisma.child.findMany({
-      where: { isActive: true },
-      include: {
-        assignments: {
-          where: { isActive: true },
-          include: {
-            volunteer: {
-              select: { id: true, name: true, email: true, specialization: true }
-            }
-          }
-        },
-        concerns: {
-          where: { status: { not: "RESOLVED" } }
-        }
-      },
-      orderBy: { name: "asc" }
-    }),
-    prisma.user.findMany({
-      where: { 
-        role: "VOLUNTEER",
-        approvalStatus: "APPROVED",
-        isActive: true 
-      },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        specialization: true,
-        state: true
-      },
-      orderBy: { name: "asc" }
-    }),
-    prisma.assignment.findMany({
-      where: { isActive: true },
-      include: {
-        child: {
-          select: { id: true, name: true, age: true, state: true }
-        },
-        volunteer: {
-          select: { id: true, name: true, email: true, specialization: true }
-        }
-      },
-      orderBy: { assignedAt: "desc" }
-    })
-  ]);
+export default function AssignmentsPage() {
+  const [children, setChildren] = useState([]);
+  const [volunteers, setVolunteers] = useState([]);
+  const [assignments, setAssignments] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
 
-  return { children, volunteers, assignments };
-}
-
-export default async function AssignmentsPage() {
-  const session = await getServerSession(authOptions);
-  
-  if (session?.user?.user_metadata?.role !== "ADMIN") {
-    return (
-      <div className="p-6">
-        <Card>
-          <CardContent className="text-center py-12">
-            <AlertTriangle className="h-12 w-12 text-red-400 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">Access Denied</h3>
-            <p className="text-gray-600 mb-4">
-              You need admin privileges to access this page.
-            </p>
-            <Link href="/dashboard">
-              <Button variant="outline">Back to Dashboard</Button>
-            </Link>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
-  const { children, volunteers, assignments } = await getAssignmentData();
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true);
+      const { data: { user } } = await supabase.auth.getUser();
+      const role = user?.user_metadata?.role || user?.app_metadata?.role;
+      if (!user || role !== 'ADMIN') {
+        setIsAdmin(false);
+        setLoading(false);
+        return;
+      }
+      setIsAdmin(true);
+      // Fetch children
+      const { data: childrenData, error: childrenError } = await supabase
+        .from('children')
+        .select('*, assignments(*, volunteer:users(id, name, specialization)), concerns(*)')
+        .eq('is_active', true);
+      if (childrenError) throw childrenError;
+      console.log('Fetched children:', childrenData);
+      setChildren(childrenData || []);
+      // Fetch all users, then filter for volunteers in client
+      const { data: allUsers, error: usersError } = await supabase
+        .from('users')
+        .select('id, name, email, specialization, state, user_metadata, app_metadata, approval_status, is_active');
+      if (usersError) throw usersError;
+      const volunteersData = (allUsers || []).filter(u => {
+        const role = u.user_metadata?.role || u.app_metadata?.role;
+        return role === 'VOLUNTEER' && u.approval_status === 'APPROVED' && u.is_active;
+      });
+      console.log('Fetched volunteers:', volunteersData);
+      setVolunteers(volunteersData);
+      // Fetch assignments
+      const { data: assignmentsData, error: assignmentsError } = await supabase
+        .from('assignments')
+        .select('*, child_id, volunteer_id')
+        .eq('is_active', true);
+      if (assignmentsError) throw assignmentsError;
+      console.log('Fetched assignments:', assignmentsData);
+      setAssignments(assignmentsData || []);
+      setLoading(false);
+    };
+    fetchData();
+  }, []);
 
   const stats = {
     totalChildren: children.length,

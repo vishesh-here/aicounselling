@@ -1,7 +1,6 @@
-
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -14,19 +13,53 @@ import {
   MapPin, AlertCircle, CheckCircle, X
 } from "lucide-react";
 import { toast } from "sonner";
+import { createClient } from '@supabase/supabase-js';
 
-interface AssignmentManagerProps {
-  children: any[];
-  volunteers: any[];
-  assignments: any[];
-}
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+const supabase = createClient(supabaseUrl, supabaseKey);
 
-export function AssignmentManager({ children, volunteers, assignments }: AssignmentManagerProps) {
+export function AssignmentManager() {
+  const [children, setChildren] = useState<any[]>([]);
+  const [volunteers, setVolunteers] = useState<any[]>([]);
+  const [assignments, setAssignments] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedState, setSelectedState] = useState("all");
   const [assignmentFilter, setAssignmentFilter] = useState("all");
   const [isAssigning, setIsAssigning] = useState(false);
   const [selectedChild, setSelectedChild] = useState<any>(null);
+
+  useEffect(() => {
+    // Fetch children, volunteers, and assignments from Supabase
+    const fetchData = async () => {
+      const { data: childrenData, error: childrenError } = await supabase
+        .from('children')
+        .select('*, assignments(*, volunteer:users(id, name, specialization)), concerns(*)')
+        .eq('is_active', true);
+      if (childrenError) toast.error(childrenError.message);
+      console.log('Fetched children:', childrenData);
+      setChildren(childrenData || []);
+      // Fetch all users, then filter for volunteers in client
+      const { data: allUsers, error: usersError } = await supabase
+        .from('users')
+        .select('id, name, email, specialization, state, user_metadata, app_metadata, approval_status, is_active');
+      if (usersError) toast.error(usersError.message);
+      const volunteersData = (allUsers || []).filter(u => {
+        const role = u.user_metadata?.role || u.app_metadata?.role;
+        return role === 'VOLUNTEER' && u.approval_status === 'APPROVED' && u.is_active;
+      });
+      console.log('Fetched volunteers:', volunteersData);
+      setVolunteers(volunteersData);
+      const { data: assignmentsData, error: assignmentsError } = await supabase
+        .from('assignments')
+        .select('*, child_id, volunteer_id')
+        .eq('is_active', true);
+      if (assignmentsError) toast.error(assignmentsError.message);
+      console.log('Fetched assignments:', assignmentsData);
+      setAssignments(assignmentsData || []);
+    };
+    fetchData();
+  }, []);
 
   // Filter children based on search and filters
   const filteredChildren = children.filter(child => {
@@ -46,54 +79,39 @@ export function AssignmentManager({ children, volunteers, assignments }: Assignm
   // Assign volunteer to child
   const assignVolunteer = async (childId: string, volunteerId: string) => {
     setIsAssigning(true);
-    try {
-      const response = await fetch("/api/admin/assignments", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "assign",
-          childId,
-          volunteerId
-        })
-      });
-
-      if (response.ok) {
-        toast.success("Assignment created successfully!");
-        window.location.reload();
-      } else {
-        const error = await response.json();
-        toast.error(error.message || "Failed to create assignment");
-      }
-    } catch (error) {
-      console.error("Assignment error:", error);
-      toast.error("Failed to create assignment");
-    } finally {
-      setIsAssigning(false);
+    const { data, error } = await supabase
+      .from('assignments')
+      .insert([{ child_id: childId, volunteer_id: volunteerId, is_active: true }]);
+    if (error) {
+      toast.error(error.message || 'Failed to create assignment');
+    } else {
+      toast.success('Assignment created successfully!');
+      // Refresh data
+      const { data: assignmentsData } = await supabase
+        .from('assignments')
+        .select('*')
+        .eq('is_active', true);
+      setAssignments(assignmentsData || []);
     }
+    setIsAssigning(false);
   };
 
   // Remove assignment
   const removeAssignment = async (assignmentId: string) => {
-    try {
-      const response = await fetch("/api/admin/assignments", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "remove",
-          assignmentId
-        })
-      });
-
-      if (response.ok) {
-        toast.success("Assignment removed successfully!");
-        window.location.reload();
-      } else {
-        const error = await response.json();
-        toast.error(error.message || "Failed to remove assignment");
-      }
-    } catch (error) {
-      console.error("Remove assignment error:", error);
-      toast.error("Failed to remove assignment");
+    const { data, error } = await supabase
+      .from('assignments')
+      .update({ is_active: false })
+      .eq('id', assignmentId);
+    if (error) {
+      toast.error(error.message || 'Failed to remove assignment');
+    } else {
+      toast.success('Assignment removed successfully!');
+      // Refresh data
+      const { data: assignmentsData } = await supabase
+        .from('assignments')
+        .select('*')
+        .eq('is_active', true);
+      setAssignments(assignmentsData || []);
     }
   };
 

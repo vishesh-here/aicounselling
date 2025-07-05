@@ -51,4 +51,61 @@ Migrate the AI Counseling Web App's database from a previous PostgreSQL instance
 
 ---
 
-**This file tracks all major changes, issues, and solutions during the Supabase migration and seeding process.** 
+**This file tracks all major changes, issues, and solutions during the Supabase migration and seeding process.**
+
+---
+
+## Supabase Auth Migration, UI Refactor & React Error Debugging (June 2024)
+
+### Objective
+Fully migrate authentication/session management from NextAuth/Prisma to Supabase Auth, refactor all UI and API logic to use Supabase, and resolve all runtime errors for a stable, modern stack.
+
+### Key Work & Steps
+1. **Supabase Auth Migration**
+   - Removed all NextAuth/Prisma-based authentication and session logic.
+   - Set up Supabase client and updated login/signup flows to use Supabase Auth.
+   - Added scripts to set user roles (admin/volunteer) in Supabase metadata.
+   - Refactored all role-based UI and access control to use Supabase session/user metadata.
+
+2. **API & Data Fetching Refactor**
+   - Deprecated legacy API routes that relied on NextAuth/Prisma session checks.
+   - Moved all protected data fetching (sessions, assignments, analytics) to the client using Supabase SDK.
+   - Updated dashboard, analytics, and session pages to fetch and aggregate data client-side.
+
+3. **UI Component Refactor**
+   - Removed all custom toast/toaster code and switched to Sonner for notifications.
+   - Updated all session/role checks in sidebar, profile, and providers to use Supabase.
+   - Cleaned up all references to NextAuth, SessionProvider, and related hooks.
+
+4. **Major Runtime Error: `destroy is not a function`**
+   - After upgrading Sonner and React, encountered a persistent error: `TypeError: destroy is not a function`.
+   - Systematically removed all custom toasts, cleaned dependencies, and updated all UI libraries (Sonner, Radix, Recharts, React Simple Maps).
+   - Discovered the root cause: an incorrect return value in a `useEffect` cleanup in `DashboardStats` (was returning a React element instead of a function/undefined).
+   - Fixed the cleanup logic and ensured all intervals are cleared properly.
+
+5. **Component Isolation & Debugging**
+   - Used binary search commenting to isolate the error to `DashboardStats`.
+   - Verified all other dashboard widgets and shared components.
+   - Confirmed the fix resolved the error for all user roles.
+
+6. **Supabase Relationship Error (Volunteer Dashboard)**
+   - Volunteers saw: `Could not find a relationship between 'assignment' and 'child' in the schema cache`.
+   - Root cause: missing foreign key from `assignment.childId` to `child.id` in Supabase.
+   - Solution: Add the foreign key constraint and refresh the schema cache in Supabase.
+
+7. **Final Merge & Cleanup**
+   - Committed and merged all changes into `main`.
+   - Ensured all code, dependencies, and UI are stable and up to date.
+
+---
+
+### Key Challenges & Learnings
+- React effect cleanups **must only return a function or undefined**—never a React element or object.
+- Upgrading libraries (Sonner, Radix, Recharts) requires careful alignment with React/Next.js versions.
+- Systematic isolation (commenting out components) is effective for debugging persistent runtime errors.
+- Supabase joins require explicit foreign key relationships in the database schema.
+- Clean up all legacy code and dependencies after a major migration to avoid subtle bugs.
+
+---
+
+**This section tracks the full Supabase Auth migration, UI refactor, and major debugging/fixes in June 2024.** 

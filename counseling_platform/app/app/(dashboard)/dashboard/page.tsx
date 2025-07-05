@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Users, Calendar, BookOpen, TrendingUp, MapPin, Heart } from "lucide-react";
-import { DashboardStats } from "@/components/dashboard/dashboard-stats";
+import DashboardStats from "@/components/dashboard/dashboard-stats";
 import { ConcernAnalytics } from "@/components/dashboard/concern-analytics";
 import { IndiaMap } from "@/components/dashboard/india-map";
 import { RecentSessions } from "@/components/dashboard/recent-sessions";
@@ -30,7 +30,8 @@ export default function DashboardPage() {
         const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
         if (sessionError || !sessionData.session) throw sessionError || new Error("No session");
         const user = sessionData.session.user;
-        const role = user.user_metadata?.role || "VOLUNTEER";
+        console.log('Dashboard user:', user);
+        const role = user.user_metadata?.role || user.app_metadata?.role || "VOLUNTEER";
         setUserRole(role);
         // Fetch assignments for volunteer
         let assignmentsData: any[] = [];
@@ -95,7 +96,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Stats Cards */}
-      <DashboardStats data={{}} userRole={userRole} />
+      <DashboardStats />
 
       {/* Main Content Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -103,7 +104,7 @@ export default function DashboardPage() {
         <div className="lg:col-span-2 space-y-6">
           {userRole === "ADMIN" && (
             <>
-              {/* <TrendAnalytics /> */}
+              <TrendAnalytics />
               {/* <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">

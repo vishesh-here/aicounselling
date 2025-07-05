@@ -10,6 +10,12 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { AlertCircle, CheckCircle, Clock, XCircle, User, MapPin, Phone, Mail, Briefcase, Heart, Loader2 } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { createClient } from '@supabase/supabase-js';
+import { toast } from 'sonner';
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 interface User {
   id: string;
@@ -47,27 +53,34 @@ export default function UserApprovalsPage() {
     rejectionReason: ''
   });
   const [processingAction, setProcessingAction] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
+    const fetchUsers = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      console.log('Fetched user:', user);
+      const role = user?.user_metadata?.role || user?.app_metadata?.role;
+      if (!user || role !== 'ADMIN') {
+        setIsAdmin(false);
+        setLoading(false);
+        return;
+      }
+      setIsAdmin(true);
+      // Fetch all users, then filter for volunteers in client
+      const { data: allUsers, error: usersError } = await supabase
+        .from('users')
+        .select('id, name, email, phone, state, specialization, experience, motivation, approval_status, rejection_reason, created_at, approved_by, approved_at, user_metadata, app_metadata');
+      if (usersError) toast.error(usersError.message);
+      // Filter for volunteers using metadata
+      const volunteers = (allUsers || []).filter(u => {
+        const role = u.user_metadata?.role || u.app_metadata?.role;
+        return role === 'VOLUNTEER';
+      });
+      setUsers(volunteers);
+      setLoading(false);
+    };
     fetchUsers();
   }, []);
-
-  const fetchUsers = async () => {
-    try {
-      setLoading(true);
-      const response = await fetch('/api/admin/user-approvals');
-      if (response.ok) {
-        const data = await response.json();
-        setUsers(data.users);
-      } else {
-        console.error('Failed to fetch users');
-      }
-    } catch (error) {
-      console.error('Error fetching users:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleActionClick = (user: User, action: 'approve' | 'reject') => {
     setActionDialog({
@@ -152,6 +165,8 @@ export default function UserApprovalsPage() {
       </div>
     );
   }
+
+  if (!isAdmin) return <div>Unauthorized</div>;
 
   return (
     <div className="p-6 space-y-6">
