@@ -60,8 +60,9 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user || session.user.role !== "ADMIN") {
+    const supabase = getSupabase(request);
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (!user || user.user_metadata.role !== "ADMIN") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -78,7 +79,10 @@ export async function GET(request: NextRequest) {
       orderBy: { assignedAt: "desc" }
     });
 
-    return NextResponse.json({ assignments });
+    // Filter out assignments with missing child or volunteer relations
+    const filteredAssignments = assignments.filter(a => a.child && a.volunteer);
+
+    return NextResponse.json({ assignments: filteredAssignments });
 
   } catch (error) {
     console.error("Assignment fetch error:", error);

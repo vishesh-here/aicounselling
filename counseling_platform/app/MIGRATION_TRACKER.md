@@ -108,4 +108,29 @@ Fully migrate authentication/session management from NextAuth/Prisma to Supabase
 
 ---
 
-**This section tracks the full Supabase Auth migration, UI refactor, and major debugging/fixes in June 2024.** 
+**This section tracks the full Supabase Auth migration, UI refactor, and major debugging/fixes in July 2025.**
+
+## Children Add Sticky Error (Resolved)
+
+### Issue:
+- Adding a new child profile via the /api/children endpoint consistently failed with 401, 500, or database errors.
+- Error messages included: 401 Unauthorized, 500 Internal Server Error, and 'null value in column "id" of relation "children" violates not-null constraint'.
+
+### What We Tried (and Failed):
+- Migrated all authentication/session logic from NextAuth to Supabase Auth (client and API).
+- Ensured the access token was sent in the Authorization header for all API calls.
+- Refactored all API routes to use Supabase Auth and removed all NextAuth code/config.
+- Cleaned up all old compiled .js files and the .next build cache.
+- Verified that the Supabase service role key was set in the environment variables.
+- Checked the API payload for all required fields.
+
+### What Finally Worked:
+- The root cause was the Supabase/Postgres `children` table schema: the `id` column was NOT NULL but did not have a default value (e.g., `gen_random_uuid()`).
+- Fixed by updating the Supabase table schema so the `id` column is a UUID with a default value of `gen_random_uuid()`.
+- Ensured the API insert did NOT send an `id` (let the database generate it).
+- After this schema fix, adding a child worked as expected.
+
+### Lessons Learned:
+- Always check database schema defaults for primary keys when using Supabase/Postgres.
+- Clean up all legacy code and build artifacts after major auth/session migrations.
+- Use detailed server logs to debug 500 errors and database constraint violations. 

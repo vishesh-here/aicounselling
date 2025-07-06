@@ -76,35 +76,37 @@ export function TrendAnalytics({ className }: TrendAnalyticsProps) {
   useEffect(() => {
     const fetchTrends = async () => {
       setLoading(true);
-      const { data: { user } } = await supabase.auth.getUser();
-      const role = user?.user_metadata?.role || user?.app_metadata?.role;
+      setError(null);
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError || !sessionData.session) {
+        setIsAdmin(false);
+        setLoading(false);
+        return;
+      }
+      const user = sessionData.session.user;
+      const role = user.user_metadata?.role || user.app_metadata?.role;
       if (!user || role !== 'ADMIN') {
         setIsAdmin(false);
         setLoading(false);
         return;
       }
       setIsAdmin(true);
-      // Fetch concerns
-      const { data: concernsData, error: concernsError } = await supabase
-        .from('concerns')
-        .select('*');
-      if (concernsError) throw concernsError;
-      // Fetch sessions
-      const { data: sessionsData, error: sessionsError } = await supabase
-        .from('sessions')
-        .select('*');
-      if (sessionsError) throw sessionsError;
-      // Aggregate trends
-      setTrends({
-        totalSessions: sessionsData.length,
-        concernsRecorded: concernsData.length,
-        concernsResolved: concernsData.filter(c => c.status === 'RESOLVED').length,
-        // Add more trend analytics as needed
-      });
-      setLoading(false);
+      try {
+        const accessToken = sessionData.session.access_token;
+        const response = await fetch('/api/dashboard/trends', {
+          headers: { Authorization: `Bearer ${accessToken}` }
+        });
+        const result = await response.json();
+        if (!result.success) throw new Error('Failed to fetch trend data');
+        setData(result.data || []);
+      } catch (err: any) {
+        setError(err.message || 'Failed to load trend data');
+      } finally {
+        setLoading(false);
+      }
     };
     fetchTrends();
-  }, []);
+  }, [selectedMonth]);
 
   const handleMonthChange = (month: string) => {
     setSelectedMonth(month);

@@ -1,15 +1,27 @@
-
 export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth-config";
+import { createClient } from '@supabase/supabase-js';
+import { cookies } from 'next/headers';
 import { prisma } from "@/lib/db";
+
+function getSupabaseWithAuth(req: NextRequest) {
+  const authHeader = req.headers.get('authorization');
+  let globalHeaders: Record<string, string> = {};
+  if (authHeader) {
+    globalHeaders['Authorization'] = authHeader;
+  } else {
+    const cookieStore = cookies();
+    globalHeaders['Cookie'] = cookieStore.toString();
+  }
+  return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, { global: { headers: globalHeaders } });
+}
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
+    const supabase = getSupabaseWithAuth(request);
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 

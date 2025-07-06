@@ -23,24 +23,35 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
   // Get children count by state
-  const { data: childrenByState, error: childrenError } = await supabase
+  const { data: childrenByStateRaw, error: childrenError } = await supabase
     .from('children')
-    .select('state, count:id')
-    .eq('isActive', true)
-    .group('state');
+    .select('state, id')
+    .eq('isActive', true);
+  // Group children by state in JS
+  const childrenByState: Record<string, number> = {};
+  (childrenByStateRaw || []).forEach((c: any) => {
+    if (c.state) {
+      childrenByState[c.state] = (childrenByState[c.state] || 0) + 1;
+    }
+  });
   // Get volunteers count by state
-  const { data: volunteersByState, error: volunteersError } = await supabase
+  const { data: volunteersByStateRaw, error: volunteersError } = await supabase
     .from('users')
-    .select('state, count:id')
+    .select('state, id, role, isActive')
     .eq('role', 'VOLUNTEER')
     .eq('isActive', true)
-    .not('state', 'is', null)
-    .group('state');
+    .not('state', 'is', null);
+  // Group volunteers by state in JS
+  const volunteersByState: Record<string, number> = {};
+  (volunteersByStateRaw || []).forEach((v: any) => {
+    if (v.state) {
+      volunteersByState[v.state] = (volunteersByState[v.state] || 0) + 1;
+    }
+  });
   // Get sessions count by state (through children)
   const { data: sessions, error: sessionsError } = await supabase
     .from('sessions')
-    .select('id, child_id')
-    .eq('isActive', true);
+    .select('id, child_id');
   const { data: children, error: childrenListError } = await supabase
     .from('children')
     .select('id, state')

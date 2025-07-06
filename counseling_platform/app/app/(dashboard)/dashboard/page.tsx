@@ -19,6 +19,11 @@ export default function DashboardPage() {
   const [dashboardStats, setDashboardStats] = useState<any>(null);
   const [assignments, setAssignments] = useState<any[]>([]);
   const [recentSessions, setRecentSessions] = useState<any[]>([]);
+  const [concernAnalytics, setConcernAnalytics] = useState<any[]>([]);
+  const [stateData, setStateData] = useState<any[]>([]);
+  const [childrenByState, setChildrenByState] = useState<any[]>([]);
+  const [volunteersByState, setVolunteersByState] = useState<any[]>([]);
+  const [selectedHeatmap, setSelectedHeatmap] = useState<'children' | 'volunteers'>('children');
   const router = useRouter();
 
   useEffect(() => {
@@ -58,6 +63,54 @@ export default function DashboardPage() {
           sessionsData = sessions || [];
           setRecentSessions(sessionsData);
         }
+        // Fetch concern analytics data
+        const { data: concernData, error: concernError } = await supabase
+          .from('concerns')
+          .select('id, category, child_id');
+        if (concernError) throw concernError;
+        // Fetch children for age
+        const { data: childrenData, error: childrenError } = await supabase
+          .from('children')
+          .select('id, age, isActive');
+        if (childrenError) throw childrenError;
+        // Group by age group and category
+        const analytics: any[] = [];
+        (concernData || []).forEach((concern: any) => {
+          const child = (childrenData || []).find((c: any) => c.id === concern.child_id && c.isActive);
+          if (!child) return;
+          let age_group = '';
+          if (child.age >= 6 && child.age <= 10) age_group = '6-10';
+          else if (child.age >= 11 && child.age <= 13) age_group = '11-13';
+          else if (child.age >= 14 && child.age <= 16) age_group = '14-16';
+          else age_group = '17+';
+          const existing = analytics.find(a => a.age_group === age_group && a.category === concern.category);
+          if (existing) existing.count += 1;
+          else analytics.push({ age_group, category: concern.category, count: 1 });
+        });
+        setConcernAnalytics(analytics);
+        // Fetch children and volunteers for IndiaMap heatmaps
+        const { data: children, error: childrenMapError } = await supabase
+          .from('children')
+          .select('id, state')
+          .neq('state', null);
+        const { data: volunteers, error: volunteersError } = await supabase
+          .from('users')
+          .select('id, state, role')
+          .eq('role', 'VOLUNTEER')
+          .neq('state', null);
+        if (childrenMapError || volunteersError) throw childrenMapError || volunteersError;
+        // Aggregate children by state
+        const childrenStateMap: Record<string, number> = {};
+        (children || []).forEach((c: any) => {
+          if (c.state) childrenStateMap[c.state] = (childrenStateMap[c.state] || 0) + 1;
+        });
+        setChildrenByState(Object.entries(childrenStateMap).map(([state, value]) => ({ state, value })));
+        // Aggregate volunteers by state
+        const volunteersStateMap: Record<string, number> = {};
+        (volunteers || []).forEach((v: any) => {
+          if (v.state) volunteersStateMap[v.state] = (volunteersStateMap[v.state] || 0) + 1;
+        });
+        setVolunteersByState(Object.entries(volunteersStateMap).map(([state, value]) => ({ state, value })));
         // For admin, you may want to fetch additional analytics data here (already handled in child components)
         setDashboardStats({}); // Placeholder if you want to add stats
       } catch (err: any) {
@@ -105,18 +158,23 @@ export default function DashboardPage() {
           {userRole === "ADMIN" && (
             <>
               <TrendAnalytics />
-              {/* <Card>
+              <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <MapPin className="h-5 w-5" />
-                    Children Distribution Across India
+                    Children & Volunteers Distribution Across India
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <IndiaMap />
+                  <IndiaMap
+                    childrenData={childrenByState}
+                    volunteersData={volunteersByState}
+                    selectedHeatmap={selectedHeatmap}
+                    onHeatmapChange={setSelectedHeatmap}
+                  />
                 </CardContent>
-              </Card> */}
-              {/* <Card>
+              </Card>
+              <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <TrendingUp className="h-5 w-5" />
@@ -124,9 +182,9 @@ export default function DashboardPage() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <ConcernAnalytics data={[]} />
+                  <ConcernAnalytics data={concernAnalytics} />
                 </CardContent>
-              </Card> */}
+              </Card>
             </>
           )}
         </div>
