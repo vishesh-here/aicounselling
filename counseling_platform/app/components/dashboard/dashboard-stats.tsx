@@ -34,11 +34,10 @@ export default function DashboardStats() {
       // Fetch volunteers
       const { data: allUsers, error: usersError } = await supabase
         .from('users')
-        .select('id, user_metadata, app_metadata, approval_status, isActive');
+        .select('id, name, email, role, state, isActive, approvalStatus');
       if (usersError) throw usersError;
       const volunteers = (allUsers || []).filter(u => {
-        const role = u.user_metadata?.role || u.app_metadata?.role;
-        return role === 'VOLUNTEER' && u.approval_status === 'APPROVED' && u.isActive;
+        return u.role === 'VOLUNTEER' && u.approvalStatus === 'APPROVED' && u.isActive;
       });
       // Fetch sessions
       const { data: sessionsData, error: sessionsError } = await supabase

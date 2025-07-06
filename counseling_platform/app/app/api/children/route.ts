@@ -5,18 +5,22 @@ import { NextRequest, NextResponse } from 'next/server';
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
-// Helper to get Supabase client with user session
-function getSupabase(req: NextRequest) {
-  const cookieStore = cookies();
-  const supabase = createClient(supabaseUrl, supabaseKey, {
-    global: { headers: { Cookie: cookieStore.toString() } },
-  });
-  return supabase;
+// Helper to get Supabase client with user session or access token
+function getSupabaseWithAuth(req: NextRequest) {
+  const authHeader = req.headers.get('authorization');
+  let globalHeaders: Record<string, string> = {};
+  if (authHeader) {
+    globalHeaders['Authorization'] = authHeader;
+  } else {
+    const cookieStore = cookies();
+    globalHeaders['Cookie'] = cookieStore.toString();
+  }
+  return createClient(supabaseUrl, supabaseKey, { global: { headers: globalHeaders } });
 }
 
 // GET - Fetch all children (with optional filters)
 export async function GET(request: NextRequest) {
-  const supabase = getSupabase(request);
+  const supabase = getSupabaseWithAuth(request);
   const { data: { user }, error: userError } = await supabase.auth.getUser();
   if (!user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -40,7 +44,7 @@ export async function GET(request: NextRequest) {
 
 // POST - Create a new child (admin only)
 export async function POST(request: NextRequest) {
-  const supabase = getSupabase(request);
+  const supabase = getSupabaseWithAuth(request);
   const { data: { user }, error: userError } = await supabase.auth.getUser();
   console.log('User roles 0:', {
     user_metadata: user?.user_metadata?.role,

@@ -1,7 +1,4 @@
-
-import { getServerSession } from "next-auth";
 import { prisma } from "@/lib/db";
-import { authOptions } from "@/lib/auth-config";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -44,8 +41,7 @@ async function getKnowledgeBaseData() {
 }
 
 export default async function KnowledgeBasePage() {
-  const session = await getServerSession(authOptions);
-  const userRole = session?.user?.role || "VOLUNTEER";
+  const userRole = "VOLUNTEER";
 
   const { knowledgeBase, culturalStories } = await getKnowledgeBaseData();
 

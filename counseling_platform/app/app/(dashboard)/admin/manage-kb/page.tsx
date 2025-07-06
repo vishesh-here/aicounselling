@@ -1,7 +1,5 @@
-import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
-import { authOptions } from "@/lib/auth-config";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -40,12 +38,6 @@ async function getKnowledgeBaseData() {
 }
 
 export default async function ManageKnowledgeBasePage() {
-  const session = await getServerSession(authOptions);
-  
-  if (!session?.user || session.user.user_metadata?.role !== "ADMIN") {
-    redirect("/dashboard");
-  }
-
   const { knowledgeBase, culturalStories, totalUsers } = await getKnowledgeBaseData();
 
   const getCategoryColor = (category: string) => {

@@ -39,14 +39,14 @@ export function AssignmentManager() {
       if (childrenError) toast.error(childrenError.message);
       console.log('Fetched children:', childrenData);
       setChildren(childrenData || []);
-      // Fetch all users, then filter for volunteers in client
+      // Fetch all users, then filter for volunteers and admins in client
       const { data: allUsers, error: usersError } = await supabase
         .from('users')
-        .select('id, name, email, specialization, state, user_metadata, app_metadata, approval_status, isActive');
+        .select('id, name, email, specialization, state, role, isActive');
       if (usersError) toast.error(usersError.message);
       const volunteersData = (allUsers || []).filter(u => {
-        const role = u.user_metadata?.role || u.app_metadata?.role;
-        return role === 'VOLUNTEER' && u.approval_status === 'APPROVED' && u.isActive;
+        const role = u.role;
+        return (role === 'VOLUNTEER' || role === 'ADMIN') && u.isActive;
       });
       console.log('Fetched volunteers:', volunteersData);
       setVolunteers(volunteersData);
@@ -301,36 +301,15 @@ export function AssignmentManager() {
                                 </p>
                               )}
                             </div>
-                            <div className="space-y-2 max-h-60 overflow-y-auto">
-                              {volunteers.map((volunteer) => (
-                                <div key={volunteer.id} className="p-3 border rounded hover:bg-gray-50">
-                                  <div className="flex items-center justify-between">
-                                    <div>
-                                      <p className="font-medium">{volunteer.name}</p>
-                                      <p className="text-sm text-gray-600">{volunteer.email}</p>
-                                      <div className="flex items-center gap-2 mt-1">
-                                        <span className="text-xs text-gray-500">
-                                          <MapPin className="h-3 w-3 inline mr-1" />
-                                          {volunteer.state}
-                                        </span>
-                                        {volunteer.specialization && (
-                                          <Badge variant="secondary" className="text-xs">
-                                            {volunteer.specialization}
-                                          </Badge>
-                                        )}
-                                      </div>
-                                    </div>
-                                    <Button
-                                      size="sm"
-                                      onClick={() => assignVolunteer(child.id, volunteer.id)}
-                                      disabled={isAssigning}
-                                    >
-                                      Assign
-                                    </Button>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
+                            {/* Volunteer Dropdown and Inline Confirmation */}
+                            <AssignVolunteerInline
+                              child={child}
+                              volunteers={volunteers}
+                              assignments={assignments}
+                              onAssign={assignVolunteer}
+                              onClose={() => setSelectedChild(null)}
+                              isAssigning={isAssigning}
+                            />
                           </div>
                         </DialogContent>
                       </Dialog>
@@ -354,19 +333,31 @@ export function AssignmentManager() {
                     <div className="flex items-center justify-between">
                       <div className="flex items-center space-x-4">
                         <div>
-                          <p className="font-medium">{assignment.child.name}</p>
-                          <p className="text-sm text-gray-600">
-                            {assignment.child.age} years old • {assignment.child.state}
-                          </p>
+                          {assignment.child ? (
+                            <>
+                              <p className="font-medium">{assignment.child.name}</p>
+                              <p className="text-sm text-gray-600">
+                                {assignment.child.age} years old • {assignment.child.state}
+                              </p>
+                            </>
+                          ) : (
+                            <p className="text-red-500 font-medium">Child not found</p>
+                          )}
                         </div>
                         <div className="text-gray-400">→</div>
                         <div>
-                          <p className="font-medium">{assignment.volunteer.name}</p>
-                          <p className="text-sm text-gray-600">{assignment.volunteer.email}</p>
-                          {assignment.volunteer.specialization && (
-                            <Badge variant="secondary" className="text-xs mt-1">
-                              {assignment.volunteer.specialization}
-                            </Badge>
+                          {assignment.volunteer ? (
+                            <>
+                              <p className="font-medium">{assignment.volunteer.name}</p>
+                              <p className="text-sm text-gray-600">{assignment.volunteer.email}</p>
+                              {assignment.volunteer.specialization && (
+                                <Badge variant="secondary" className="text-xs mt-1">
+                                  {assignment.volunteer.specialization}
+                                </Badge>
+                              )}
+                            </>
+                          ) : (
+                            <p className="text-red-500 font-medium">Volunteer not found</p>
                           )}
                         </div>
                       </div>
@@ -398,6 +389,59 @@ export function AssignmentManager() {
           </Card>
         </TabsContent>
       </Tabs>
+    </div>
+  );
+}
+
+function AssignVolunteerInline({ child, volunteers, assignments, onAssign, onClose, isAssigning }: any) {
+  const [selectedVolunteerId, setSelectedVolunteerId] = useState<string>("");
+  const [showConfirm, setShowConfirm] = useState(false);
+  const selectedVolunteer = volunteers.find((v: any) => v.id === selectedVolunteerId);
+  // Count current mentees for this volunteer (including this assignment if confirmed)
+  const currentMenteeCount = assignments.filter((a: any) => a.volunteerId === selectedVolunteerId && a.isActive).length;
+  const menteeCountWithNew = selectedVolunteerId ? currentMenteeCount + 1 : 0;
+
+  return (
+    <div className="space-y-4">
+      <Select value={selectedVolunteerId} onValueChange={setSelectedVolunteerId}>
+        <SelectTrigger className="w-full">
+          <SelectValue placeholder="Select a volunteer" />
+        </SelectTrigger>
+        <SelectContent>
+          {volunteers.map((vol: any) => (
+            <SelectItem key={vol.id} value={vol.id}>
+              {vol.name} ({vol.state})
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      {selectedVolunteer && !showConfirm && (
+        <Button className="w-full bg-blue-600 hover:bg-blue-700" onClick={() => setShowConfirm(true)}>
+          Next
+        </Button>
+      )}
+      {showConfirm && selectedVolunteer && (
+        <div className="space-y-2">
+          <p className="text-sm">
+            <span className="font-medium">{selectedVolunteer.name}</span> will now have <span className="font-bold">{menteeCountWithNew}</span> assigned mentee(s). Would you like to confirm?
+          </p>
+          <div className="flex gap-2">
+            <Button
+              className="bg-green-600 hover:bg-green-700"
+              disabled={isAssigning}
+              onClick={async () => {
+                await onAssign(child.id, selectedVolunteerId);
+                onClose();
+              }}
+            >
+              Yes, Assign
+            </Button>
+            <Button variant="outline" onClick={() => setShowConfirm(false)}>
+              No, Cancel
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

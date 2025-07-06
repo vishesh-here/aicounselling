@@ -1,15 +1,29 @@
-
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-config";
 import { prisma } from "@/lib/db";
+import { createClient } from '@supabase/supabase-js';
+import { cookies } from 'next/headers';
 
 export const dynamic = "force-dynamic";
 
+function getSupabaseWithAuth(req: NextRequest) {
+  const authHeader = req.headers.get('authorization');
+  let globalHeaders: Record<string, string> = {};
+  if (authHeader) {
+    globalHeaders['Authorization'] = authHeader;
+  } else {
+    const cookieStore = cookies();
+    globalHeaders['Cookie'] = cookieStore.toString();
+  }
+  return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, { global: { headers: globalHeaders } });
+}
+
 export async function POST(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
+    const supabase = getSupabaseWithAuth(request);
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -31,7 +45,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Session not found" }, { status: 404 });
     }
 
-    if (sessionRecord.volunteerId !== session.user.id) {
+    if (sessionRecord.volunteerId !== user.id) {
       return NextResponse.json({ error: "Unauthorized access to session" }, { status: 403 });
     }
 
@@ -126,7 +140,7 @@ export async function POST(request: NextRequest) {
         if (summaryData.keyInsights) {
           memoryEntries.push({
             child_id: sessionRecord.child_id,
-            volunteerId: session.user.id,
+            volunteerId: user.id,
             sessionId: sessionId,
             memoryType: "IMPORTANT_INSIGHT" as const,
             content: summaryData.keyInsights,
@@ -138,7 +152,7 @@ export async function POST(request: NextRequest) {
         if (summaryData.breakthroughs) {
           memoryEntries.push({
             child_id: sessionRecord.child_id,
-            volunteerId: session.user.id,
+            volunteerId: user.id,
             sessionId: sessionId,
             memoryType: "BREAKTHROUGH_MOMENT" as const,
             content: summaryData.breakthroughs,
@@ -150,7 +164,7 @@ export async function POST(request: NextRequest) {
         if (summaryData.challengesFaced) {
           memoryEntries.push({
             child_id: sessionRecord.child_id,
-            volunteerId: session.user.id,
+            volunteerId: user.id,
             sessionId: sessionId,
             memoryType: "WARNING_SIGN" as const,
             content: summaryData.challengesFaced,
@@ -183,8 +197,9 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
+    const supabase = getSupabaseWithAuth(request);
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
