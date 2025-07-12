@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { RichSessionSummary } from "./rich-session-summary";
+import { SessionSummaryForm } from "./SessionSummaryForm";
 import { 
   PlayCircle, StopCircle, CheckCircle, Clock, 
   Brain, BookOpen, MessageCircle, AlertTriangle, FileText, Bot, ExternalLink
@@ -102,7 +102,6 @@ export function SessionInterface({ child, activeSession, userId, userRole }: Ses
       const summaryPayload = {
         sessionId: currentSession.id,
         ...summaryData,
-        isDraft,
         summary: summaryData.summary || "",
       };
       let result;
@@ -512,17 +511,15 @@ export function SessionInterface({ child, activeSession, userId, userRole }: Ses
       {/* Rich Session Summary Dialog */}
       {showRichSummary && currentSession && (
         <Dialog open={showRichSummary} onOpenChange={setShowRichSummary}>
-          <DialogContent className="max-w-7xl max-h-[90vh] overflow-y-auto">
+          <DialogContent className="max-w-4xl max-h-[90vh] p-8 overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Complete Session Summary</DialogTitle>
             </DialogHeader>
-            <RichSessionSummary
-              sessionId={currentSession.id}
-              child_id={child.id}
-              childName={child.name}
-              sessionStartTime={new Date(currentSession.startedAt || currentSession.createdAt)}
-              onSave={handleSaveSummary}
-              onSubmit={handleSubmitSummary}
+            <SessionSummaryForm
+              existingConcerns={activeConcerns}
+              onSubmit={async (formData) => {
+                await saveSessionSummary(formData, false);
+              }}
             />
           </DialogContent>
         </Dialog>

@@ -1,4 +1,3 @@
-
 "use client";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -64,63 +63,6 @@ export function SessionHistory({ sessions }: SessionHistoryProps) {
 
   return (
     <div className="space-y-6">
-      {/* Session Statistics */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600">Total Sessions</p>
-                <p className="text-2xl font-bold text-gray-900">{sessions.length}</p>
-              </div>
-              <Calendar className="h-8 w-8 text-blue-600" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600">Resolved Issues</p>
-                <p className="text-2xl font-bold text-gray-900">
-                  {sessions.filter(s => s.summary?.resolutionStatus === "RESOLVED").length}
-                </p>
-              </div>
-              <TrendingUp className="h-8 w-8 text-green-600" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600">In Progress</p>
-                <p className="text-2xl font-bold text-gray-900">
-                  {sessions.filter(s => s.summary?.resolutionStatus === "IN_PROGRESS").length}
-                </p>
-              </div>
-              <Clock className="h-8 w-8 text-orange-600" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600">Follow-ups Needed</p>
-                <p className="text-2xl font-bold text-gray-900">
-                  {sessions.filter(s => s.summary?.followUpNeeded).length}
-                </p>
-              </div>
-              <MessageCircle className="h-8 w-8 text-purple-600" />
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
       {/* Session Timeline */}
       <Card>
         <CardHeader>
@@ -161,9 +103,9 @@ export function SessionHistory({ sessions }: SessionHistoryProps) {
                           </div>
                           <div className="flex items-center space-x-2">
                             <Badge 
-                              className={`text-xs ${getStatusColor(session.summary?.resolutionStatus || "PENDING")}`}
+                              className={`text-xs ${getStatusColor(session.status || "PENDING")}`}
                             >
-                              {session.summary?.resolutionStatus || "Pending"}
+                              {session.status || "Pending"}
                             </Badge>
                           </div>
                         </div>
@@ -171,7 +113,7 @@ export function SessionHistory({ sessions }: SessionHistoryProps) {
                         <div className="space-y-2">
                           <div className="flex items-center text-sm text-gray-600">
                             <Calendar className="h-4 w-4 mr-2" />
-                            <span>{format(new Date(session.createdAt), "PPP")}</span>
+                            <span>{new Date(session.createdAt).toLocaleString()}</span>
                             <span className="mx-2">•</span>
                             <span>{formatDistanceToNow(new Date(session.createdAt))} ago</span>
                           </div>
@@ -181,11 +123,9 @@ export function SessionHistory({ sessions }: SessionHistoryProps) {
                             <span>Conducted by: {session.volunteer?.name || "Unknown"}</span>
                           </div>
 
-                          {session.summary?.summary && (
-                            <div className="mt-3 p-3 bg-gray-50 rounded-lg">
-                              <p className="text-sm text-gray-700">{session.summary.summary}</p>
-                            </div>
-                          )}
+                          <div className="mt-3 p-3 bg-gray-50 rounded-lg">
+                            <p className="text-sm text-gray-700">{session.summary?.summary || "No summary available."}</p>
+                          </div>
 
                           {/* Concerns Discussed */}
                           {session.summary?.concernsDiscussed?.length > 0 && (

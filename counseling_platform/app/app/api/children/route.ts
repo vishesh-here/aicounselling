@@ -70,10 +70,24 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized. Only administrators can create child profiles.' }, { status: 401 });
   }
   const body = await request.json();
-  // TODO: Validate body fields
-  const { data, error } = await supabase.from('children').insert([{ ...body }]).select();
+  const { concerns, ...childData } = body;
+  const { data, error } = await supabase.from('children').insert([{ ...childData }]).select();
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
-  return NextResponse.json({ child: data[0] });
+  const child = data[0];
+  // Insert initial concerns if provided
+  if (concerns && Array.isArray(concerns) && concerns.length > 0) {
+    const now = new Date().toISOString();
+    const concernRows = concerns.map((c: any) => ({
+      ...c,
+      child_id: child.id,
+      status: 'OPEN',
+      identifiedAt: now,
+      createdAt: now,
+      updatedAt: now
+    }));
+    await supabase.from('concerns').insert(concernRows);
+  }
+  return NextResponse.json({ child });
 }

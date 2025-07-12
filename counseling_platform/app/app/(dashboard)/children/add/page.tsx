@@ -33,7 +33,7 @@ const COMMON_INTERESTS = [
   "Art", "Cooking", "Gardening", "Animals", "Nature", "Movies", "Stories"
 ];
 
-const COMMON_CHALLENGES = [
+const COMMON_CONCERNS = [
   "Financial difficulties", "Family problems", "Academic pressure", "Peer pressure",
   "Low self-esteem", "Social isolation", "Health issues", "Learning difficulties",
   "Language barriers", "Lack of resources", "Transportation issues", "Safety concerns"
@@ -48,7 +48,7 @@ interface FormData {
   background: string;
   schoolLevel: string;
   interests: string[];
-  challenges: string[];
+  concerns: { title: string }[];
   language: string;
 }
 
@@ -67,14 +67,14 @@ export default function AddChildPage() {
     background: '',
     schoolLevel: '',
     interests: [],
-    challenges: [],
+    concerns: [],
     language: 'Hindi'
   });
 
   const [errors, setErrors] = useState<FormErrors>({});
   const [isLoading, setIsLoading] = useState(false);
   const [newInterest, setNewInterest] = useState('');
-  const [newChallenge, setNewChallenge] = useState('');
+  const [newConcern, setNewConcern] = useState('');
   const [session, setSession] = useState<any>(null);
 
   useEffect(() => {
@@ -145,15 +145,17 @@ export default function AddChildPage() {
       newErrors.interests = 'Please add at least one interest';
     }
 
-    if (formData.challenges.length === 0) {
-      newErrors.challenges = 'Please add at least one challenge';
+    if (formData.concerns.length === 0) {
+      newErrors.concerns = 'Please add at least one concern';
     }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleInputChange = (field: keyof FormData, value: string | string[]) => {
+  type FormDataField = keyof FormData;
+  type FormDataValue = string | string[] | { title: string }[];
+  const handleInputChange = (field: FormDataField, value: FormDataValue) => {
     setFormData(prev => ({ ...prev, [field]: value }));
     // Clear error for this field when user starts typing
     if (errors[field]) {
@@ -172,15 +174,15 @@ export default function AddChildPage() {
     handleInputChange('interests', formData.interests.filter(i => i !== interest));
   };
 
-  const addChallenge = (challenge: string) => {
-    if (challenge.trim() && !formData.challenges.includes(challenge.trim())) {
-      handleInputChange('challenges', [...formData.challenges, challenge.trim()]);
-      setNewChallenge('');
+  const addConcern = (concern: string) => {
+    if (concern.trim() && !formData.concerns.some(c => c.title === concern.trim())) {
+      handleInputChange('concerns', [...formData.concerns, { title: concern.trim() }]);
+      setNewConcern('');
     }
   };
 
-  const removeChallenge = (challenge: string) => {
-    handleInputChange('challenges', formData.challenges.filter(c => c !== challenge));
+  const removeConcern = (concern: string) => {
+    handleInputChange('concerns', formData.concerns.filter(c => c.title !== concern));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -198,7 +200,7 @@ export default function AddChildPage() {
         ...formData,
         age: parseInt(formData.age),
         interests: formData.interests,
-        challenges: formData.challenges,
+        concerns: formData.concerns,
         isActive: true,
         createdAt: now,
         updatedAt: now
@@ -444,60 +446,57 @@ export default function AddChildPage() {
               {errors.interests && <p className="text-sm text-red-500">{errors.interests}</p>}
             </div>
 
-            {/* Challenges */}
+            {/* Concerns */}
             <div className="space-y-4">
-              <h3 className="text-lg font-medium text-gray-900">Challenges *</h3>
-              
+              <h3 className="text-lg font-medium text-gray-900">Concerns *</h3>
               <div className="space-y-2">
-                <Label>Add Challenges</Label>
+                <Label>Add Concerns</Label>
                 <div className="flex gap-2">
                   <Input
-                    value={newChallenge}
-                    onChange={(e) => setNewChallenge(e.target.value)}
-                    placeholder="Type a challenge..."
+                    value={newConcern}
+                    onChange={(e) => setNewConcern(e.target.value)}
+                    placeholder="Type a concern..."
                     onKeyPress={(e) => {
                       if (e.key === 'Enter') {
                         e.preventDefault();
-                        addChallenge(newChallenge);
+                        addConcern(newConcern);
                       }
                     }}
                   />
                   <Button
                     type="button"
-                    onClick={() => addChallenge(newChallenge)}
+                    onClick={() => addConcern(newConcern)}
                     size="sm"
                   >
                     <Plus className="h-4 w-4" />
                   </Button>
                 </div>
               </div>
-
               <div className="space-y-2">
-                <Label>Common Challenges (click to add)</Label>
+                <Label>Common Concerns (click to add)</Label>
                 <div className="flex flex-wrap gap-2">
-                  {COMMON_CHALLENGES.map(challenge => (
+                  {COMMON_CONCERNS.map(concern => (
                     <Badge
-                      key={challenge}
-                      variant={formData.challenges.includes(challenge) ? "default" : "outline"}
+                      key={concern}
+                      variant={formData.concerns.some(c => c.title === concern) ? "default" : "outline"}
                       className="cursor-pointer"
-                      onClick={() => addChallenge(challenge)}
+                      onClick={() => addConcern(concern)}
                     >
-                      {challenge}
+                      {concern}
                     </Badge>
                   ))}
                 </div>
               </div>
-
-              {formData.challenges.length > 0 && (
+              {formData.concerns.length > 0 && (
                 <div className="space-y-2">
-                  <Label>Selected Challenges</Label>
+                  <Label>Selected Concerns</Label>
                   <div className="flex flex-wrap gap-2">
-                    {formData.challenges.map(challenge => (
-                      <Badge key={challenge} variant="destructive" className="flex items-center gap-1">
-                        {challenge}
+                    {formData.concerns.map(concern => (
+                      <Badge key={concern.title} variant="destructive" className="flex items-center gap-1">
+                        {concern.title}
                         <button
                           type="button"
-                          onClick={() => removeChallenge(challenge)}
+                          onClick={() => removeConcern(concern.title)}
                           className="ml-1 hover:text-red-300"
                         >
                           <X className="h-3 w-3" />
@@ -507,7 +506,7 @@ export default function AddChildPage() {
                   </div>
                 </div>
               )}
-              {errors.challenges && <p className="text-sm text-red-500">{errors.challenges}</p>}
+              {errors.concerns && <p className="text-sm text-red-500">{errors.concerns}</p>}
             </div>
 
             {/* Error Display */}

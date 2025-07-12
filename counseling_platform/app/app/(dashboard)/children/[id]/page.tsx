@@ -68,6 +68,33 @@ export default function ChildDetailPage({ params }: PageProps) {
     };
     fetchData();
   }, [params.id]);
+
+  const refetchChildData = async () => {
+    const { data } = await supabase.auth.getSession();
+    if (!data.session?.user) return;
+    let query = supabase
+      .from('children')
+      .select('*, assignments(*, volunteer:users(id, name, specialization)), concerns(*), sessions(*, volunteer:users(id, name), summary:session_summaries(*))')
+      .eq('id', params.id)
+      .eq('isActive', true)
+      .single();
+    const user = data.session.user;
+    const userRole = user.user_metadata?.role || user.app_metadata?.role;
+    const { data: childData, error: childError } = await query;
+    if (childError || !childData) return;
+    if (userRole === 'VOLUNTEER') {
+      const assigned = (childData.assignments || []).some((a: any) => a.volunteerId === user.id && a.isActive);
+      if (!assigned) return;
+    }
+    let sortedSessions = (childData.sessions || []).sort((a: any, b: any) => {
+      const aTime = new Date(a.endedAt || a.startedAt).getTime();
+      const bTime = new Date(b.endedAt || b.startedAt).getTime();
+      return bTime - aTime;
+    });
+    childData.sessions = sortedSessions;
+    setChild(childData);
+  };
+
   if (error) {
     return <div>{error}</div>;
   }
@@ -204,30 +231,6 @@ export default function ChildDetailPage({ params }: PageProps) {
           </CardContent>
         </Card>
       </div>
-
-      {/* Active Concerns Alert */}
-      {activeConcerns.length > 0 && (
-        <Card className="border-orange-200 bg-orange-50">
-          <CardContent className="p-4">
-            <div className="flex items-start gap-3">
-              <AlertCircle className="h-5 w-5 text-orange-600 mt-0.5" />
-              <div className="flex-1">
-                <h4 className="font-medium text-orange-900 mb-2">Active Concerns Requiring Attention</h4>
-                <div className="flex flex-wrap gap-2">
-                  {activeConcerns.map((concern: any) => (
-                    <Badge 
-                      key={concern.id}
-                      className={getSeverityColor(concern.severity)}
-                    >
-                      {concern.category}: {concern.title}
-                    </Badge>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
 
       {/* Main Content Tabs */}
       <Tabs defaultValue="briefing" className="space-y-6">

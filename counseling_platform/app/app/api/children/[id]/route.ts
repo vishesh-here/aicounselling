@@ -23,7 +23,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
   // If volunteer, only show assigned children
   let query = supabase
     .from('children')
-    .select('*, assignments(*, volunteer:users(id, name, specialization)), concerns(*), sessions(*)')
+    .select('*, assignments(*, volunteer:users(id, name, specialization)), concerns(*), sessions(*, volunteer:users(id, name), summary:session_summaries(*))')
     .eq('id', params.id)
     .eq('isActive', true)
     .single();
