@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth-config";
 import { prisma } from "@/lib/db";
 import { createClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
@@ -30,162 +29,101 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { sessionId, summaryData, isDraft = false } = body;
 
-    // Validate required fields
     if (!sessionId) {
       return NextResponse.json({ error: "Session ID is required" }, { status: 400 });
     }
 
     // Check if session exists and belongs to the user
-    const sessionRecord = await prisma.session.findUnique({
-      where: { id: sessionId },
-      include: { volunteer: true }
-    });
-
-    if (!sessionRecord) {
+    const { data: sessionRecord, error: sessionError } = await supabase
+      .from('sessions')
+      .select('*')
+      .eq('id', sessionId)
+      .single();
+    if (sessionError || !sessionRecord) {
       return NextResponse.json({ error: "Session not found" }, { status: 404 });
     }
-
     if (sessionRecord.volunteerId !== user.id) {
       return NextResponse.json({ error: "Unauthorized access to session" }, { status: 403 });
     }
 
     // Prepare the summary data for database
     const summaryPayload = {
-      summary: summaryData.additionalNotes || "Session completed",
-      sessionDuration: summaryData.sessionDuration,
-      sessionType: summaryData.sessionType,
-      
-      // Mood and state
-      initialMood: summaryData.initialMood,
-      finalMood: summaryData.finalMood,
-      moodChanges: summaryData.moodChanges,
-      
-      // Content and topics
-      concernsDiscussed: summaryData.concernsAddressed || [],
-      topicsDiscussed: summaryData.topicsDiscussed || [],
-      
-      // Techniques and cultural elements
-      culturalStoriesUsed: summaryData.culturalStoriesUsed || [],
-      techniquesUsed: summaryData.techniquesUsed || [],
-      techniqueEffectiveness: summaryData.techniqueEffectiveness || {},
-      storyResponse: summaryData.storyResponse,
-      
-      // Insights and breakthroughs
-      breakthroughs: summaryData.breakthroughs,
-      keyInsights: summaryData.keyInsights,
-      
-      // Challenges and engagement
-      challengesFaced: summaryData.challengesFaced,
-      challengeHandling: summaryData.challengeHandling,
-      engagementLevel: summaryData.engagementLevel,
-      participationNotes: summaryData.participationNotes,
-      
-      // Progress and next steps
-      progressMade: summaryData.breakthroughs || summaryData.keyInsights,
-      nextSteps: summaryData.actionItems || [],
-      actionItems: summaryData.actionItems || [],
-      recommendations: summaryData.recommendations,
-      
-      // Assessment and planning
-      sessionEffectiveness: summaryData.sessionEffectiveness,
-      volunteerConfidence: summaryData.volunteerConfidence,
-      nextSessionFocus: summaryData.nextSessionFocus,
-      nextSessionTiming: summaryData.nextSessionTiming,
-      
-      // Additional information
-      additionalNotes: summaryData.additionalNotes,
-      
-      // Set resolution status based on effectiveness and next steps
-      resolutionStatus: (summaryData.sessionEffectiveness === "Very Effective" && summaryData.actionItems?.length === 0) 
-        ? ("RESOLVED" as const)
-        : ("IN_PROGRESS" as const),
-      followUpNeeded: summaryData.actionItems?.length > 0 || summaryData.nextSessionFocus,
-      followUpDate: summaryData.nextSessionTiming ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) : null // Default to 1 week if timing specified
+      sessionId,
+      summary: summaryData.summary,
+      effectiveness: summaryData.effectiveness,
+      followup_notes: summaryData.followup_notes,
+      new_concerns: summaryData.new_concerns,
+      resolved_concerns: summaryData.resolved_concerns,
+      next_session_date: summaryData.next_session_date ? summaryData.next_session_date : null,
+      updatedAt: new Date().toISOString(),
     };
 
-    // Create or update session summary
-    const existingSummary = await prisma.sessionSummary.findUnique({
-      where: { sessionId }
-    });
-
-    let savedSummary;
+    // Upsert session summary
+    const { data: existingSummary, error: findError } = await supabase
+      .from('session_summaries')
+      .select('*')
+      .eq('sessionId', sessionId)
+      .maybeSingle();
+    if (findError) throw findError;
+    let result;
     if (existingSummary) {
-      savedSummary = await prisma.sessionSummary.update({
-        where: { sessionId },
-        data: summaryPayload
-      });
+      result = await supabase
+        .from('session_summaries')
+        .update(summaryPayload)
+        .eq('sessionId', sessionId);
     } else {
-      savedSummary = await prisma.sessionSummary.create({
-        data: {
-          sessionId,
-          ...summaryPayload
-        }
-      });
+      result = await supabase
+        .from('session_summaries')
+        .insert({ ...summaryPayload, createdAt: new Date().toISOString() });
+    }
+    if (result.error) throw result.error;
+
+    // Update concerns table for new and resolved concerns
+    const childId = sessionRecord.child_id;
+    const now = new Date().toISOString();
+    // Insert new concerns
+    if (summaryData.new_concerns && Array.isArray(summaryData.new_concerns) && summaryData.new_concerns.length > 0) {
+      // new_concerns should be array of objects: { title, category, severity, description }
+      const concernRows = summaryData.new_concerns.map((c: any) => ({
+        child_id: childId,
+        title: c.title,
+        description: c.description || "Identified during session",
+        category: c.category || "SOCIAL",
+        severity: c.severity || "MEDIUM",
+        status: 'OPEN',
+        createdAt: now
+      }));
+      const { error: insertError } = await supabase.from('concerns').insert(concernRows);
+      if (insertError) console.error("INSERT ERROR:", insertError);
+      console.log("Child ID for new concerns:", childId);
+    }
+    // Resolve concerns
+    if (summaryData.resolved_concerns && Array.isArray(summaryData.resolved_concerns) && summaryData.resolved_concerns.length > 0) {
+      const { error: updateError } = await supabase.from('concerns')
+        .update({ status: 'RESOLVED', resolvedAt: now })
+        .in('id', summaryData.resolved_concerns);
+      if (updateError) console.error("UPDATE ERROR:", updateError);
+      console.log("Resolved concern IDs:", summaryData.resolved_concerns);
     }
 
     // If not a draft, also update the session status
     if (!isDraft) {
-      await prisma.session.update({
-        where: { id: sessionId },
-        data: {
-          status: "COMPLETED",
-          endedAt: new Date()
-        }
-      });
-
-      // Create conversation memory entries for important insights
-      if (summaryData.keyInsights || summaryData.breakthroughs) {
-        const memoryEntries = [];
-        
-        if (summaryData.keyInsights) {
-          memoryEntries.push({
-            child_id: sessionRecord.child_id,
-            volunteerId: user.id,
-            sessionId: sessionId,
-            memoryType: "IMPORTANT_INSIGHT" as const,
-            content: summaryData.keyInsights,
-            importance: 4,
-            associatedTags: summaryData.topicsDiscussed || []
-          });
-        }
-
-        if (summaryData.breakthroughs) {
-          memoryEntries.push({
-            child_id: sessionRecord.child_id,
-            volunteerId: user.id,
-            sessionId: sessionId,
-            memoryType: "BREAKTHROUGH_MOMENT" as const,
-            content: summaryData.breakthroughs,
-            importance: 5,
-            associatedTags: summaryData.topicsDiscussed || []
-          });
-        }
-
-        if (summaryData.challengesFaced) {
-          memoryEntries.push({
-            child_id: sessionRecord.child_id,
-            volunteerId: user.id,
-            sessionId: sessionId,
-            memoryType: "WARNING_SIGN" as const,
-            content: summaryData.challengesFaced,
-            importance: 3,
-            associatedTags: ["challenges"]
-          });
-        }
-
-        // Save memory entries
-        for (const entry of memoryEntries) {
-          await prisma.conversationMemory.create({ data: entry });
-        }
-      }
+      const { error: sessionUpdateError } = await supabase
+        .from('sessions')
+        .update({
+          status: 'COMPLETED',
+          endedAt: now,
+          updatedAt: now
+        })
+        .eq('id', sessionId);
+      if (sessionUpdateError) throw sessionUpdateError;
     }
 
     return NextResponse.json({
       success: true,
-      summary: savedSummary,
-      message: isDraft ? "Summary saved as draft" : "Session summary submitted successfully"
+      message: isDraft ? "Summary saved as draft" : "Session summary submitted successfully",
+      shouldRefetch: true
     });
-
   } catch (error) {
     console.error("Error saving session summary:", error);
     return NextResponse.json({
