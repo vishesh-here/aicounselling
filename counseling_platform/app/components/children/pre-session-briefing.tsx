@@ -12,6 +12,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription, DialogClose } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { supabase } from "@/lib/supabaseClient";
 
 interface PreSessionBriefingProps {
   child: any;
@@ -30,6 +31,7 @@ const CONCERN_CATEGORIES = [
 
 export function PreSessionBriefing({ child }: PreSessionBriefingProps) {
   const [aiRoadmap, setAiRoadmap] = useState<any>(null);
+  const [roadmapTimestamp, setRoadmapTimestamp] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [showAddConcern, setShowAddConcern] = useState(false);
   const [newConcern, setNewConcern] = useState({ title: "", description: "", category: "", severity: "LOW" });
@@ -42,13 +44,36 @@ export function PreSessionBriefing({ child }: PreSessionBriefingProps) {
   const openConcerns = concerns.filter((c: any) => c.status !== "RESOLVED");
   const resolvedConcerns = concerns.filter((c: any) => c.status === "RESOLVED");
 
+  useEffect(() => {
+    const fetchPersistedRoadmap = async () => {
+      try {
+        const params = new URLSearchParams({ child_id: child.id });
+        const response = await fetch(`/api/ai/enhanced-roadmap?${params.toString()}`);
+        if (response.ok) {
+          const data = await response.json();
+          if (data.roadmap) {
+            setAiRoadmap(data.roadmap);
+            setRoadmapTimestamp(data.generated_at || null);
+          }
+        }
+      } catch (err) {}
+    };
+    fetchPersistedRoadmap();
+  }, [child.id]);
+
   // Generate AI roadmap based on child's profile and concerns
   const generateAiRoadmap = async () => {
     setLoading(true);
     try {
+      // Get Supabase access token
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData?.session?.access_token;
       const response = await fetch("/api/ai/enhanced-roadmap", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {})
+        },
         body: JSON.stringify({
           child_id: child.id,
           childProfile: {
@@ -71,6 +96,7 @@ export function PreSessionBriefing({ child }: PreSessionBriefingProps) {
       if (response.ok) {
         const data = await response.json();
         setAiRoadmap(data.roadmap);
+        setRoadmapTimestamp(data.generated_at || null);
       } else {
         console.error("Failed to generate roadmap:", await response.text());
       }
@@ -176,6 +202,9 @@ export function PreSessionBriefing({ child }: PreSessionBriefingProps) {
           </div>
         </CardHeader>
         <CardContent>
+          {roadmapTimestamp && (
+            <div className="text-xs text-gray-500 mb-2">Last generated: {new Date(roadmapTimestamp).toLocaleString()}</div>
+          )}
           {aiRoadmap ? (
             <div className="space-y-6">
               {/* Pre-Session Preparation */}

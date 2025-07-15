@@ -35,6 +35,7 @@ model User {
   conversationMemories  ConversationMemory[]
   approver              User?                  @relation("UserApprovals", fields: [approvedBy], references: [id])
   approvedUsers         User[]                 @relation("UserApprovals")
+  roadmaps              Roadmap[]
 
   @@map("users")
 }
@@ -60,6 +61,7 @@ model Child {
   sessions             Session[]
   aiChatConversations  AiChatConversation[]
   conversationMemories ConversationMemory[]
+  roadmaps             Roadmap[]
   tags                 Tag[]                  @relation("ChildTags")
 
   @@map("children")
@@ -97,6 +99,7 @@ model Session {
   summary              SessionSummary?
   child                Child                  @relation(fields: [child_id], references: [id], onDelete: Cascade)
   volunteer            User                   @relation(fields: [volunteerId], references: [id], onDelete: Cascade)
+  roadmaps             Roadmap[]
 
   @@map("sessions")
 }
@@ -313,6 +316,24 @@ model Tag {
   knowledgeBase KnowledgeBase[] @relation("KnowledgeBaseTags")
 
   @@map("tags")
+}
+
+model Roadmap {
+  id             String   @id @default(cuid())
+  child_id       String
+  session_id     String?  // nullable, for pre-session or general roadmaps
+  roadmap_content Json
+  generated_at   DateTime @default(now())
+  generated_by   String
+
+  child          Child    @relation(fields: [child_id], references: [id], onDelete: Cascade)
+  session        Session? @relation(fields: [session_id], references: [id], onDelete: Cascade)
+  user           User     @relation(fields: [generated_by], references: [id], onDelete: Cascade)
+
+  @@index([child_id])
+  @@index([session_id])
+  @@index([generated_by])
+  @@map("roadmaps")
 }
 
 enum UserRole {

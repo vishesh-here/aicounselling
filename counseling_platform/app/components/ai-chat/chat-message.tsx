@@ -6,6 +6,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Bot, User, Clock } from "lucide-react";
 import { format } from "date-fns";
+import ReactMarkdown from 'react-markdown';
 
 interface ChatMessageProps {
   role: "USER" | "ASSISTANT" | "SYSTEM";
@@ -58,7 +59,11 @@ export function ChatMessage({ role, content, timestamp, metadata }: ChatMessageP
             : "bg-white text-gray-900 border border-gray-200 shadow-sm"
         )}>
           <div className="whitespace-pre-wrap">
-            {content}
+            {isUser ? (
+              content
+            ) : (
+              <ReactMarkdown>{content}</ReactMarkdown>
+            )}
           </div>
         </div>
 

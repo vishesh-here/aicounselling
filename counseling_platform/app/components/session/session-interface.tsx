@@ -26,6 +26,7 @@ interface SessionInterfaceProps {
 export function SessionInterface({ child, activeSession, userId, userRole }: SessionInterfaceProps) {
   const [currentSession, setCurrentSession] = useState(activeSession);
   const [aiRoadmap, setAiRoadmap] = useState<any>(null);
+  const [roadmapTimestamp, setRoadmapTimestamp] = useState<string | null>(null);
   const [loadingRoadmap, setLoadingRoadmap] = useState(false);
   const [sessionNotes, setSessionNotes] = useState("");
   const [recommendedStories, setRecommendedStories] = useState<any[]>([]);
@@ -35,6 +36,24 @@ export function SessionInterface({ child, activeSession, userId, userRole }: Ses
   const router = useRouter();
 
   const activeConcerns = child.concerns?.filter((c: any) => c.status !== "RESOLVED") || [];
+
+  useEffect(() => {
+    const fetchPersistedRoadmap = async () => {
+      try {
+        const params = new URLSearchParams({ child_id: child.id });
+        if (currentSession?.id) params.append('session_id', currentSession.id);
+        const response = await fetch(`/api/ai/enhanced-roadmap?${params.toString()}`);
+        if (response.ok) {
+          const data = await response.json();
+          if (data.roadmap) {
+            setAiRoadmap(data.roadmap);
+            setRoadmapTimestamp(data.generated_at || null);
+          }
+        }
+      } catch (err) {}
+    };
+    fetchPersistedRoadmap();
+  }, [child.id, currentSession?.id]);
 
   // Start a new session using Supabase
   const startSession = async () => {
@@ -149,16 +168,26 @@ export function SessionInterface({ child, activeSession, userId, userRole }: Ses
 
   // Navigate to AI Mentor
   const openAiMentor = () => {
-    router.push(`/ai-mentor/${child.id}`);
+    if (currentSession?.id) {
+      router.push(`/ai-mentor/${child.id}/${currentSession.id}`);
+    } else {
+      router.push(`/ai-mentor/${child.id}`);
+    }
   };
 
   // Generate enhanced AI roadmap
   const generateEnhancedRoadmap = async () => {
     setLoadingRoadmap(true);
     try {
+      // Get Supabase access token
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData?.session?.access_token;
       const response = await fetch("/api/ai/enhanced-roadmap", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {})
+        },
         body: JSON.stringify({
           child_id: child.id,
           childProfile: {
@@ -174,13 +203,15 @@ export function SessionInterface({ child, activeSession, userId, userRole }: Ses
             title: c.title,
             severity: c.severity,
             description: c.description
-          }))
+          })),
+          session_id: currentSession?.id || null
         })
       });
 
       if (response.ok) {
         const data = await response.json();
         setAiRoadmap(data.roadmap);
+        setRoadmapTimestamp(data.generated_at || null);
         setRecommendedStories(data.recommendedStories || []);
       } else {
         toast.error("Failed to generate roadmap");
@@ -298,6 +329,9 @@ export function SessionInterface({ child, activeSession, userId, userRole }: Ses
               </div>
             </CardHeader>
             <CardContent>
+              {roadmapTimestamp && (
+                <div className="text-xs text-gray-500 mb-2">Last generated: {new Date(roadmapTimestamp).toLocaleString()}</div>
+              )}
               {aiRoadmap ? (
                 <div className="space-y-6">
                   {/* Pre-Session Preparation */}

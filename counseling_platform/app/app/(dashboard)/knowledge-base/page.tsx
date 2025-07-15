@@ -1,4 +1,4 @@
-import { prisma } from "@/lib/db";
+import { createClient } from '@supabase/supabase-js';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,36 +14,24 @@ import { ResourceDetailsDialog } from "@/components/knowledge-base/resource-deta
 
 export const dynamic = "force-dynamic";
 
-async function getKnowledgeBaseData() {
-  const [knowledgeBase, culturalStories] = await Promise.all([
-    prisma.knowledgeBase.findMany({
-      where: { isActive: true },
-      include: {
-        createdBy: {
-          select: { name: true }
-        },
-        tags: true
-      },
-      orderBy: { createdAt: "desc" }
-    }),
-    prisma.culturalStory.findMany({
-      where: { isActive: true },
-      include: {
-        createdBy: {
-          select: { name: true }
-        }
-      },
-      orderBy: { createdAt: "desc" }
-    })
-  ]);
-
-  return { knowledgeBase, culturalStories };
+async function getKnowledgeResources() {
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  );
+  const { data, error } = await supabase
+    .from("knowledge_resources")
+    .select("*")
+    .order("created_at", { ascending: false });
+  if (error) throw new Error(error.message);
+  return data || [];
 }
 
 export default async function KnowledgeBasePage() {
   const userRole = "VOLUNTEER";
-
-  const { knowledgeBase, culturalStories } = await getKnowledgeBaseData();
+  const resources = await getKnowledgeResources();
+  const knowledgeBase = resources.filter((r: any) => r.type === "knowledge_base");
+  const culturalStories = resources.filter((r: any) => r.type === "cultural_story");
 
   const getCategoryIcon = (category: string) => {
     switch (category) {
@@ -212,7 +200,7 @@ export default async function KnowledgeBasePage() {
                     <CardTitle className="text-lg leading-tight">{story.title}</CardTitle>
                     <div className="flex items-center gap-2 mt-2">
                       <Badge className={`text-xs ${getSourceColor(story.source)}`}>
-                        {story.source.replace('_', ' ')}
+                        {(story.source ? story.source.replace('_', ' ') : 'Unknown')}
                       </Badge>
                     </div>
                   </div>
@@ -328,7 +316,7 @@ export default async function KnowledgeBasePage() {
                     <span>{resource.createdBy?.name}</span>
                     <span className="mx-1">•</span>
                     <Calendar className="h-3 w-3 mr-1" />
-                    <span>{formatDistanceToNow(new Date(resource.createdAt))} ago</span>
+                    <span>{formatDistanceToNow(new Date(resource.created_at))} ago</span>
                   </div>
                   <ResourceDetailsDialog resource={resource} />
                 </div>

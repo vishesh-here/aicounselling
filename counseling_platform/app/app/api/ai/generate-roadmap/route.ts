@@ -27,6 +27,18 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { childProfile, activeConcerns, recentSessions } = body;
 
+    // Fetch RAG context (relevant knowledge chunks)
+    const ragRes = await fetch(`${process.env.NEXTAUTH_URL || "http://localhost:3000"}/api/ai/rag-context`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ child_id: childProfile.id })
+    });
+    let ragChunks = [];
+    if (ragRes.ok) {
+      const ragData = await ragRes.json();
+      ragChunks = ragData.context?.relevant_knowledge_chunks || [];
+    }
+
     // Prepare context for AI
     const context = `
 Child Profile:
@@ -45,6 +57,9 @@ Recent Session History:
 ${recentSessions?.map((session: any, index: number) => 
   `Session ${index + 1}: ${session.summary || "No summary"} (Status: ${session.resolutionStatus || "Unknown"})`
 ).join("\n") || "No previous sessions"}
+
+Relevant Knowledge Chunks:
+${ragChunks.map((chunk: any, idx: number) => `Chunk ${idx + 1}: ${chunk.content}`).join("\n") || "No relevant knowledge found"}
 
 Based on this information, provide a counseling session roadmap for this child.
 `;

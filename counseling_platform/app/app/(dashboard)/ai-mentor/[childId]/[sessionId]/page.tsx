@@ -1,7 +1,5 @@
-!!!
-console.log('AI Mentor page loaded - TEST LOG');
-
 "use client";
+console.log('AI Mentor page loaded - CORRECT PAGE');
 
 import { useState, useEffect, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
@@ -59,11 +57,13 @@ interface ConversationHistory {
 
 export default function AiMentorPage() {
   const params = useParams();
-  const router = useRouter();
+  console.log('Params:', params);
   const child_id = params.childId as string;
-  // Support sessionId param if present
-  const sessionIdParam = (params as any).sessionId as string | undefined;
-  const [sessionId, setSessionId] = useState<string | null>(sessionIdParam ?? null);
+  const sessionId = params.sessionId as string;
+  if (!child_id || !sessionId) {
+    return <div className="p-6 text-center text-red-600">Invalid route: childId or sessionId is missing from params.</div>;
+  }
+  const router = useRouter();
   const [child, setChild] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -77,10 +77,10 @@ export default function AiMentorPage() {
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
-  const initialLoadRef = useRef(true);
-  const activeConversationIdRef = useRef<string | null>(null);
 
   // Helper to set currentConversationId and ref together
+  const activeConversationIdRef = useRef<string | null>(null);
+
   const setActiveConversationId = (id: string | null) => {
     console.log('[setActiveConversationId] Setting currentConversationId to:', id);
     setCurrentConversationId(id);
@@ -88,9 +88,14 @@ export default function AiMentorPage() {
     console.log('[setActiveConversationId] activeConversationIdRef.current is now:', activeConversationIdRef.current);
   };
 
+  // Debug: log currentMessages whenever it changes
+  useEffect(() => {
+    console.log('Rendering currentMessages:', currentMessages);
+  }, [currentMessages]);
+
   // Load child data and conversation history
   useEffect(() => {
-    console.log('[useEffect] Fetching child and loading conversation history. child_id:', child_id, 'sessionIdParam:', sessionIdParam);
+    console.log('[useEffect] Fetching child and loading conversation history. child_id:', child_id, 'sessionIdParam:', sessionId);
     const fetchChild = async () => {
       if (!child_id || child_id === 'undefined') {
         setError('No child selected. Please navigate from a valid child profile.');
@@ -133,11 +138,8 @@ export default function AiMentorPage() {
     };
     fetchChild();
     loadConversationHistory();
-    // If sessionId is available in params, set it
-    if (sessionIdParam) {
-      setSessionId(sessionIdParam);
-    }
-  }, [child_id, sessionIdParam]);
+    // No need to set sessionId in state, always use param
+  }, [child_id, sessionId]);
 
   // Auto-scroll to bottom when new messages are added
   useEffect(() => {
@@ -163,42 +165,28 @@ export default function AiMentorPage() {
       if (response.ok) {
         const data = await response.json();
         console.log('[loadConversationHistory] API response:', data);
-        setConversationHistory(
-          (data.conversations || []).map((conv: any) => ({
-            ...conv,
-            messages: (conv.messages || []).map((msg: any) => ({
-              ...msg,
-              timestamp: new Date(msg.timestamp)
-            }))
-          }))
-        );
+        setConversationHistory(data.conversations || []);
         // If there is a sessionId in the most recent conversation, set it
         if (data.conversations && data.conversations.length > 0 && data.conversations[0].sessionId) {
-          setSessionId(data.conversations[0].sessionId);
+          // setSessionId(data.conversations[0].sessionId); // Removed as per edit hint
         }
-        // Only auto-select and load the most recent conversation if none is active (using ref)
+        // Start a new conversation automatically if no current conversation
+        if (!currentConversationId) {
+          await startNewConversation();
+        }
         if ((data.conversations || []).length > 0 && !activeConversationIdRef.current) {
           const mostRecent = data.conversations[0];
           console.log('[loadConversationHistory] No active conversation, auto-selecting most recent:', mostRecent.id);
           setActiveConversationId(mostRecent.id);
           await loadConversation(mostRecent.id);
         }
-        // Do NOT reset currentConversationId or currentMessages if already set
       }
     } catch (error) {
       console.error('[loadConversationHistory] Error:', error);
-      // Optionally, you could call startNewConversation here if desired
+      // Start a new conversation anyway
+      await startNewConversation();
     }
   };
-
-  // On initial page load, if there are no conversations, start a new one
-  useEffect(() => {
-    console.log('[useEffect] loading:', loading, 'conversationHistory.length:', conversationHistory.length, 'initialLoadRef.current:', initialLoadRef.current);
-    if (initialLoadRef.current && !loading && conversationHistory.length === 0) {
-      // Do not auto-start a new conversation; wait for explicit user action
-      initialLoadRef.current = false;
-    }
-  }, [loading, conversationHistory]);
 
   const startNewConversation = async () => {
     console.log('[startNewConversation] Called');
@@ -262,31 +250,49 @@ export default function AiMentorPage() {
           conversationId: currentConversationId ?? null
         })
       });
-      console.log('[sendMessage] /api/ai/chat response status:', response.status);
 
+      console.log('[sendMessage] /api/ai/chat response status:', response.status);
       if (!response.ok) {
         throw new Error("Failed to get AI response");
       }
 
       const data = await response.json();
       console.log('[sendMessage] /api/ai/chat response data:', data);
-      // Always set currentConversationId to the one you just sent in
-      if (data.conversationId) {
+      // Update conversation ID if this is the first message
+      if (!currentConversationId && data.conversationId) {
         setActiveConversationId(data.conversationId);
       }
       // If the backend returns a sessionId (e.g., for new conversations), update it
       if (data.sessionId) {
-        setSessionId(data.sessionId);
+        // setSessionId(data.sessionId); // Removed as per edit hint
       }
       // Always call loadConversation if a conversationId is present
       if (data.conversationId) {
-        console.log('Calling loadConversation after sendMessage with conversationId:', data.conversationId);
+        console.log('[sendMessage] Calling loadConversation after sendMessage with conversationId:', data.conversationId);
         await loadConversation(data.conversationId);
       } else {
-        console.warn('No conversationId returned from chat API!');
+        console.warn('[sendMessage] No conversationId returned from chat API!');
       }
-      // Always refresh conversation history to include the new conversation, but do NOT reset active conversation
-      await loadConversationHistory();
+
+      // Add AI response
+      const aiMessage: ChatMessageType = {
+        id: (Date.now() + 1).toString(),
+        role: "ASSISTANT",
+        content: data.response,
+        timestamp: new Date(),
+        metadata: data.metadata
+      };
+
+      // setCurrentMessages(prev => { // This line is removed as per the edit hint
+      //   const updated = [...prev, aiMessage];
+      //   console.log('[sendMessage] Added AI message. currentMessages now:', updated);
+      //   return updated;
+      // });
+
+      // Refresh conversation history to include the new conversation
+      if (data.conversationId && !currentConversationId) {
+        loadConversationHistory();
+      }
 
     } catch (error) {
       console.error('[sendMessage] Error:', error);
@@ -312,7 +318,14 @@ export default function AiMentorPage() {
   const loadConversation = async (conversationId: string) => {
     console.log('[loadConversation] Called with conversationId:', conversationId);
     try {
-      const response = await fetch(`/api/ai/conversations/${conversationId}`);
+      // Get Supabase access token
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData?.session?.access_token;
+      const response = await fetch(`/api/ai/conversations/${conversationId}`, {
+        headers: {
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {})
+        }
+      });
       console.log('[loadConversation] /api/ai/conversations response status:', response.status);
       if (response.ok) {
         const data = await response.json();
@@ -350,8 +363,8 @@ export default function AiMentorPage() {
       const response = await fetch(`/api/ai/conversations/${conversationId}`, {
         method: "DELETE"
       });
-      console.log('[deleteConversation] /api/ai/conversations DELETE response status:', response.status);
       
+      console.log('[deleteConversation] /api/ai/conversations DELETE response status:', response.status);
       if (response.ok) {
         setConversationHistory(prev => prev.filter(conv => conv.id !== conversationId));
         if (currentConversationId === conversationId) {
@@ -367,6 +380,11 @@ export default function AiMentorPage() {
       toast.error("Failed to delete conversation");
     }
   };
+
+  // Debug: log currentMessages whenever it changes
+  useEffect(() => {
+    console.log('Rendering currentMessages:', currentMessages);
+  }, [currentMessages]);
 
   if (loading) {
     return (
@@ -430,7 +448,7 @@ export default function AiMentorPage() {
                   <div className="flex items-center justify-between">
                     <div 
                       className="flex-1"
-                      onClick={() => { setActiveConversationId(conversation.id); loadConversation(conversation.id); }}
+                      onClick={() => loadConversation(conversation.id)}
                     >
                       <div className="flex items-center gap-2 mb-1">
                         <MessageCircle className="h-3 w-3 text-purple-600" />
@@ -580,7 +598,7 @@ export default function AiMentorPage() {
         </div>
 
         {/* Chat Messages Area */}
-        <div className="flex-1 flex flex-col bg-gray-50">
+        <div className="flex-1 flex flex-col bg-gray-50 min-h-0">
           {/* Quick Suggestions */}
           {showSuggestions && (
             <div className="p-4 bg-white border-b border-gray-200">

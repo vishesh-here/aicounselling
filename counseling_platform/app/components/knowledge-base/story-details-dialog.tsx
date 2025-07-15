@@ -67,14 +67,14 @@ export function StoryDetailsDialog({ story, trigger }: StoryDetailsDialogProps) 
             <div className="space-y-3">
               <div className="flex items-center gap-2">
                 <Badge className={`${getSourceColor(story.source)}`}>
-                  {story.source.replace('_', ' ')}
+                  {(story.source ? story.source.replace('_', ' ') : 'Unknown')}
                 </Badge>
                 <div className="flex items-center text-sm text-gray-500">
                   <User className="h-3 w-3 mr-1" />
                   <span>{story.createdBy?.name}</span>
                   <span className="mx-2">•</span>
                   <Calendar className="h-3 w-3 mr-1" />
-                  <span>{formatDistanceToNow(new Date(story.createdAt))} ago</span>
+                  <span>{formatDistanceToNow(new Date(story.created_at))} ago</span>
                 </div>
               </div>
               

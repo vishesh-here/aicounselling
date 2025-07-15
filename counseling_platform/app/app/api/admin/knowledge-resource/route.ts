@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/db";
 import { createClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
 import { OpenAI } from "openai";
@@ -23,7 +22,6 @@ export async function POST(request: NextRequest) {
   try {
     const supabase = getSupabaseWithAuth(request);
     const { data: { user }, error: userError } = await supabase.auth.getUser();
-    console.log("User object:", user);
     // @ts-ignore: raw_user_meta_data may exist in runtime user object
     const role = user?.user_metadata?.role || user?.raw_user_meta_data?.role;
     if (!user || role !== "ADMIN") {
@@ -31,32 +29,40 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { title, summary, content, category, subCategory } = body;
+    const {
+      title,
+      summary,
+      content,
+      type, // 'knowledge_base' or 'cultural_story'
+      tags = [],
+      source = null,
+      // Any additional fields can be added here
+    } = body;
 
-    if (!title || !summary || !content || !category) {
+    if (!title || !summary || !content || !type) {
       return NextResponse.json(
         { error: "Missing required fields" },
         { status: 400 }
       );
     }
 
-    // 1. Create the knowledge base entry in Supabase
-    const { data: kbData, error: kbError } = await supabaseClient
-      .from("knowledge_base")
+    // 1. Create the knowledge resource entry in Supabase
+    const { data: resourceData, error: resourceError } = await supabaseClient
+      .from("knowledge_resources")
       .insert([
         {
           title,
           summary,
           content,
-          category,
-          subCategory: subCategory || null,
-          createdById: user.id
+          type,
+          tags,
+          source,
         }
       ])
       .select()
       .single();
-    if (kbError) {
-      return NextResponse.json({ error: kbError.message }, { status: 500 });
+    if (resourceError) {
+      return NextResponse.json({ error: resourceError.message }, { status: 500 });
     }
 
     // 2. Chunk the content
@@ -91,7 +97,7 @@ export async function POST(request: NextRequest) {
         .from("document_chunks")
         .insert([
           {
-            knowledgeBaseId: kbData.id,
+            knowledgeResourceId: resourceData.id,
             content: chunks[i],
             chunkIndex: i,
             embedding: embeddings[i]
@@ -103,45 +109,15 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json(
-      { message: "Knowledge base entry created and chunked successfully", id: kbData.id },
+      { message: "Knowledge resource created and chunked successfully", id: resourceData.id },
       { status: 201 }
     );
 
   } catch (error) {
-    console.error("Knowledge base creation error:", error);
+    console.error("Knowledge resource creation error:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
     );
   }
-}
-
-export async function GET(request: NextRequest) {
-  try {
-    const supabase = getSupabaseWithAuth(request);
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const knowledgeBase = await prisma.knowledgeBase.findMany({
-      where: { isActive: true },
-      include: {
-        createdBy: {
-          select: { name: true }
-        },
-        tags: true
-      },
-      orderBy: { createdAt: "desc" }
-    });
-
-    return NextResponse.json({ knowledgeBase });
-
-  } catch (error) {
-    console.error("Knowledge base fetch error:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
-  }
-}
+} 

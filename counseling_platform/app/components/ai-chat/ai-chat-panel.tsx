@@ -22,6 +22,12 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { createClient } from '@supabase/supabase-js';
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
 
 interface AiChatPanelProps {
   child_id: string;
@@ -104,10 +110,16 @@ export function AiChatPanel({
     setIsLoading(true);
 
     try {
+      // Get Supabase access token
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      console.log('Supabase sessionData:', sessionData, 'Error:', sessionError);
+      const accessToken = sessionData?.session?.access_token;
+      console.log('Supabase access token for chat:', accessToken);
       const response = await fetch("/api/ai/chat", {
         method: "POST",
         headers: {
-          "Content-Type": "application/json"
+          "Content-Type": "application/json",
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {})
         },
         body: JSON.stringify({
           message: messageContent,
