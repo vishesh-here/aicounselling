@@ -18,13 +18,9 @@ export function AddResourceDialog() {
     title: "",
     summary: "",
     content: "",
-    category: "CAREER_GUIDANCE",
-    subCategory: "",
-    source: "PANCHTANTRA",
-    themes: [] as string[],
-    applicableFor: [] as string[],
-    moralLessons: [] as string[],
-    tags: [] as string[]
+    category: "CULTURAL_WISDOM",
+    tags: [] as string[],
+    source: "PANCHTANTRA"
   });
 
   const knowledgeCategories = [
@@ -52,12 +48,35 @@ export function AddResourceDialog() {
     setLoading(true);
 
     try {
-      const endpoint = resourceType === "knowledge" ? "/api/admin/knowledge-base" : "/api/admin/cultural-stories";
-      
+      const endpoint = "/api/admin/knowledge-resource";
+      // Get Supabase access token from localStorage
+      let accessToken = null;
+      try {
+        const projectRef = Object.keys(localStorage).find(key => key.startsWith('sb-') && key.endsWith('-auth-token'));
+        if (projectRef) {
+          accessToken = JSON.parse(localStorage.getItem(projectRef) || '{}').access_token;
+        }
+      } catch (err) {}
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (accessToken) {
+        headers["Authorization"] = `Bearer ${accessToken}`;
+      }
+      // Prepare payload for unified endpoint
+      const payload: any = {
+        title: formData.title,
+        summary: formData.summary,
+        content: formData.content,
+        tags: formData.tags,
+        type: resourceType === "knowledge" ? "knowledge_base" : "cultural_story",
+        category: formData.category
+      };
+      if (resourceType === "cultural_story") {
+        payload.source = formData.source;
+      }
       const response = await fetch(endpoint, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData)
+        headers,
+        body: JSON.stringify(payload)
       });
 
       if (response.ok) {
@@ -67,18 +86,15 @@ export function AddResourceDialog() {
           title: "",
           summary: "",
           content: "",
-          category: "CAREER_GUIDANCE",
-          subCategory: "",
-          source: "PANCHTANTRA",
-          themes: [],
-          applicableFor: [],
-          moralLessons: [],
-          tags: []
+          category: "CULTURAL_WISDOM",
+          tags: [],
+          source: "PANCHTANTRA"
         });
         // Refresh the page to show new content
         window.location.reload();
       } else {
-        throw new Error("Failed to add resource");
+        const errorData = await response.json();
+        toast.error(errorData.error || "Failed to add resource. Please try again.");
       }
     } catch (error) {
       toast.error("Failed to add resource. Please try again.");
@@ -194,18 +210,15 @@ export function AddResourceDialog() {
             {/* Category or Source */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                {resourceType === "knowledge" ? "Category" : "Source"} *
+                Category *
               </label>
               <select
-                value={resourceType === "knowledge" ? formData.category : formData.source}
-                onChange={(e) => setFormData(prev => ({
-                  ...prev,
-                  [resourceType === "knowledge" ? "category" : "source"]: e.target.value
-                }))}
+                value={formData.category}
+                onChange={(e) => setFormData(prev => ({ ...prev, category: e.target.value }))}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 required
               >
-                {(resourceType === "knowledge" ? knowledgeCategories : storySources).map(option => (
+                {knowledgeCategories.map(option => (
                   <option key={option} value={option}>
                     {option.replace(/_/g, " ")}
                   </option>
@@ -213,115 +226,39 @@ export function AddResourceDialog() {
               </select>
             </div>
 
-            {/* Sub Category (for knowledge base only) */}
-            {resourceType === "knowledge" && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Sub Category
-                </label>
-                <Input
-                  value={formData.subCategory}
-                  onChange={(e) => setFormData(prev => ({ ...prev, subCategory: e.target.value }))}
-                  placeholder="Optional sub-category"
-                />
-              </div>
-            )}
-
-            {/* Themes (for stories) */}
+            {/* Source (for cultural story) */}
             {resourceType === "story" && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Themes
+                  Source *
                 </label>
-                <div className="flex gap-2 mb-2">
-                  <Input
-                    placeholder="Add theme and press Enter"
-                    onKeyPress={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        addArrayItem("themes", e.currentTarget.value);
-                        e.currentTarget.value = "";
-                      }
-                    }}
-                  />
-                </div>
-                <div className="flex flex-wrap gap-1">
-                  {formData.themes.map((theme, index) => (
-                    <Badge key={index} variant="secondary" className="flex items-center gap-1">
-                      {theme}
-                      <X 
-                        className="h-3 w-3 cursor-pointer" 
-                        onClick={() => removeArrayItem("themes", index)}
-                      />
-                    </Badge>
+                <select
+                  value={formData.source}
+                  onChange={(e) => setFormData(prev => ({ ...prev, source: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  required
+                >
+                  {storySources.map(option => (
+                    <option key={option} value={option}>
+                      {option.replace(/_/g, " ")}
+                    </option>
                   ))}
-                </div>
+                </select>
               </div>
             )}
 
-            {/* Applicable For (for stories) */}
-            {resourceType === "story" && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Applicable For
-                </label>
-                <div className="flex gap-2 mb-2">
-                  <Input
-                    placeholder="Add use case and press Enter"
-                    onKeyPress={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        addArrayItem("applicableFor", e.currentTarget.value);
-                        e.currentTarget.value = "";
-                      }
-                    }}
-                  />
-                </div>
-                <div className="flex flex-wrap gap-1">
-                  {formData.applicableFor.map((useCase, index) => (
-                    <Badge key={index} variant="outline" className="flex items-center gap-1">
-                      {useCase}
-                      <X 
-                        className="h-3 w-3 cursor-pointer" 
-                        onClick={() => removeArrayItem("applicableFor", index)}
-                      />
-                    </Badge>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Moral Lessons (for stories) */}
-            {resourceType === "story" && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Moral Lessons
-                </label>
-                <div className="flex gap-2 mb-2">
-                  <Input
-                    placeholder="Add moral lesson and press Enter"
-                    onKeyPress={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        addArrayItem("moralLessons", e.currentTarget.value);
-                        e.currentTarget.value = "";
-                      }
-                    }}
-                  />
-                </div>
-                <div className="flex flex-wrap gap-1">
-                  {formData.moralLessons.map((lesson, index) => (
-                    <Badge key={index} variant="secondary" className="flex items-center gap-1">
-                      {lesson}
-                      <X 
-                        className="h-3 w-3 cursor-pointer" 
-                        onClick={() => removeArrayItem("moralLessons", index)}
-                      />
-                    </Badge>
-                  ))}
-                </div>
-              </div>
-            )}
+            {/* Tags */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Tags (comma-separated) *
+              </label>
+              <Input
+                value={formData.tags.join(", ")}
+                onChange={(e) => setFormData(prev => ({ ...prev, tags: e.target.value.split(",").map(tag => tag.trim()) }))}
+                placeholder="e.g., wisdom, life, career"
+                required
+              />
+            </div>
 
             <div className="flex justify-end gap-2 pt-4">
               <Button type="button" variant="outline" onClick={() => setIsOpen(false)}>

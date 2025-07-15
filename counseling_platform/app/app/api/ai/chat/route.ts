@@ -1,9 +1,6 @@
 export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth-config";
-import { prisma } from "@/lib/db";
 import { createClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
 
@@ -16,89 +13,125 @@ function getSupabaseWithAuth(req: NextRequest) {
     const cookieStore = cookies();
     globalHeaders['Cookie'] = cookieStore.toString();
   }
-  return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, { global: { headers: globalHeaders } });
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    { global: { headers: globalHeaders } }
+  );
 }
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = getSupabaseWithAuth(request);
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-    if (!user) {
+    // Extract access token from Authorization header
+    const authHeader = request.headers.get('authorization');
+    let accessToken = null;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      accessToken = authHeader.replace('Bearer ', '');
+    }
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    );
+    // Authenticate user using the access token
+    let user = null;
+    if (accessToken) {
+      const { data, error } = await supabase.auth.getUser(accessToken);
+      if (error || !data?.user) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      }
+      user = data.user;
+    } else {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { 
-      message, 
-      child_id, 
-      sessionId, 
-      conversationId 
-    } = await request.json();
+    const { message, child_id, sessionId, conversationId } = await request.json();
 
-    if (!message || !child_id || !sessionId) {
-      return NextResponse.json({ 
-        error: "Message, child ID, and session ID are required" 
-      }, { status: 400 });
+    if (!message || !child_id) {
+      return NextResponse.json({ error: "Message and child ID are required" }, { status: 400 });
     }
 
     // Get or create conversation
     let conversation;
     if (conversationId) {
-      conversation = await prisma.aiChatConversation.findUnique({
-        where: { id: conversationId },
-        include: { messages: { orderBy: { timestamp: "desc" }, take: 10 } }
-      });
+      const { data: foundConv } = await supabase
+        .from('ai_chat_conversations')
+        .select('*, messages:ai_chat_messages(*)')
+        .eq('id', conversationId)
+        .single();
+      conversation = foundConv;
     }
-
     if (!conversation) {
-      conversation = await prisma.aiChatConversation.create({
-        data: {
-          sessionId,
-          child_id,
-          volunteerId: user.id,
-          conversationName: `Session Chat - ${new Date().toLocaleDateString()}`
-        },
-        include: { messages: true }
-      });
+      const { data: newConv, error: convErr } = await supabase
+        .from('ai_chat_conversations')
+        .insert([
+          {
+            sessionId: sessionId ?? null,
+            child_id,
+            volunteerId: user.id,
+            conversationName: `Session Chat - ${new Date().toLocaleDateString()}`,
+            isActive: true,
+            context: null // nullable, safe to set
+            // createdAt, updatedAt omitted (DB default)
+          }
+        ])
+        .select('*')
+        .single();
+      if (convErr || !newConv) {
+        console.error('Supabase error:', convErr);
+        return NextResponse.json({ error: 'Failed to create conversation', details: convErr?.message }, { status: 500 });
+      }
+      conversation = newConv;
+      conversation.messages = [];
     }
 
     // Build comprehensive RAG context
-    const ragContextResponse = await fetch(`${process.env.NEXTAUTH_URL}/api/ai/rag-context`, {
+    const ragContextResponse = await fetch(`${process.env.INTERNAL_API_URL || "http://localhost:3000"}/api/ai/rag-context`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ child_id, sessionId, conversationId: conversation.id })
     });
-
-    const { context: ragContext } = await ragContextResponse.json();
+    const ragContextJson = await ragContextResponse.json();
+    const ragContext = ragContextJson.context;
+    if (!ragContext || !ragContext.child) {
+      console.error("RAG context missing or incomplete:", ragContextJson);
+      // Optionally, you could return an error here or proceed with fallback
+    }
 
     // Save user message
-    await prisma.aiChatMessage.create({
-      data: {
-        conversationId: conversation.id,
-        role: "USER",
-        content: message
-      }
-    });
+    const { error: userMsgErr } = await supabase
+      .from('ai_chat_messages')
+      .insert([
+        {
+          conversationId: conversation.id, // camelCase to match schema
+          role: 'USER',
+          content: message
+        }
+      ]);
+    if (userMsgErr) {
+      return NextResponse.json({ error: 'Failed to save user message', details: userMsgErr?.message }, { status: 500 });
+    }
 
     // Generate AI response using comprehensive context
     const aiResponse = await generateAIResponse(message, ragContext, conversation);
 
     // Save AI response with RAG context
-    await prisma.aiChatMessage.create({
-      data: {
-        conversationId: conversation.id,
-        role: "ASSISTANT",
-        content: aiResponse.content,
-        ragContext: ragContext,
-        metadata: {
-          responseTime: aiResponse.metadata?.responseTime,
-          tokensUsed: aiResponse.metadata?.tokensUsed,
-          contextSources: aiResponse.metadata?.contextSources
+    const { error: aiMsgErr } = await supabase
+      .from('ai_chat_messages')
+      .insert([
+        {
+          conversationId: conversation.id, // camelCase to match schema
+          role: 'ASSISTANT',
+          content: aiResponse.content,
+          ragContext: ragContext,
+          metadata: aiResponse.metadata
         }
-      }
-    });
+      ]);
+    if (aiMsgErr) {
+      return NextResponse.json({ error: 'Failed to save AI message', details: aiMsgErr?.message }, { status: 500 });
+    }
 
     // Extract and store important insights as conversation memory
-    await extractAndStoreMemory(aiResponse.content, message, child_id, user.id, sessionId);
+    await extractAndStoreMemorySupabase(aiResponse.content, message, child_id, user.id, sessionId, supabase);
 
     return NextResponse.json({
       response: aiResponse.content,
@@ -185,6 +218,10 @@ async function generateAIResponse(userMessage: string, ragContext: any, conversa
 }
 
 function buildExpertSystemPrompt(ragContext: any): string {
+  if (!ragContext || !ragContext.child) {
+    // Fallback or error handling
+    return "You are an expert AI mentor. The child profile/context is unavailable. Respond with general guidance.";
+  }
   const child = ragContext.child;
   const sessionHistory = ragContext.sessionHistory;
   const memories = ragContext.conversationMemories;
@@ -267,33 +304,26 @@ ${knowledge?.slice(0, 5).map((kb: any) =>
 Remember: You are here to support the volunteer in real-time during an active session. Your guidance should be immediately applicable and culturally appropriate for this specific child's context.`;
 }
 
-async function extractAndStoreMemory(
-  aiResponse: string, 
-  userMessage: string, 
-  child_id: string, 
-  volunteerId: string, 
-  sessionId: string
+// Refactored memory storage for Supabase
+async function extractAndStoreMemorySupabase(
+  aiResponse: string,
+  userMessage: string,
+  child_id: string,
+  volunteerId: string,
+  sessionId: string,
+  supabase: any
 ) {
   try {
-    // Simple heuristics to identify important insights that should be stored as memory
     const importantKeywords = [
       'breakthrough', 'progress', 'technique worked', 'effective approach',
       'warning sign', 'pattern', 'family context', 'cultural reference',
       'prefers', 'responds well', 'struggles with', 'breakthrough moment'
     ];
-
     const combinedText = `${userMessage} ${aiResponse}`.toLowerCase();
-    
-    // Check if this exchange contains important information
-    const isImportant = importantKeywords.some(keyword => 
-      combinedText.includes(keyword)
-    );
-
+    const isImportant = importantKeywords.some(keyword => combinedText.includes(keyword));
     if (isImportant) {
-      // Determine memory type based on content
       let memoryType = 'IMPORTANT_INSIGHT';
       let importance = 3;
-
       if (combinedText.includes('breakthrough') || combinedText.includes('progress')) {
         memoryType = 'BREAKTHROUGH_MOMENT';
         importance = 5;
@@ -310,22 +340,20 @@ async function extractAndStoreMemory(
         memoryType = 'CULTURAL_REFERENCE';
         importance = 3;
       }
-
-      await prisma.conversationMemory.create({
-        data: {
+      await supabase.from('conversation_memories').insert([
+        {
           child_id,
-          volunteerId,
-          sessionId,
-          memoryType: memoryType as any,
+          volunteer_id: volunteerId,
+          session_id: sessionId,
+          memory_type: memoryType,
           content: `Volunteer: ${userMessage}\nAI Guidance: ${aiResponse}`,
           importance,
-          associatedTags: extractTags(combinedText)
+          associated_tags: extractTags(combinedText)
         }
-      });
+      ]);
     }
   } catch (error) {
     console.error("Error storing conversation memory:", error);
-    // Don't throw error - memory storage failure shouldn't break the chat
   }
 }
 

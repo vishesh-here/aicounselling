@@ -15,26 +15,44 @@ function getSupabase(req: NextRequest) {
 
 // GET - Fetch a specific child by ID
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
-  const supabase = getSupabase(request);
-  const { data: { user }, error: userError } = await supabase.auth.getUser();
-  if (!user) {
+  // Extract access token from Authorization header
+  const authHeader = request.headers.get('authorization');
+  let accessToken = null;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    accessToken = authHeader.replace('Bearer ', '');
+  }
+
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  );
+
+  // Authenticate user using the access token
+  let user = null;
+  if (accessToken) {
+    const { data, error } = await supabase.auth.getUser(accessToken);
+    if (error || !data?.user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    user = data.user;
+  } else {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
-  // If volunteer, only show assigned children
-  let query = supabase
+
+  // Fetch the child profile
+  const { id } = params;
+  const { data: child, error: childError } = await supabase
     .from('children')
-    .select('*, assignments(*, volunteer:users(id, name, specialization)), concerns(*), sessions(*, volunteer:users(id, name), summary:session_summaries(*))')
-    .eq('id', params.id)
+    .select('*')
+    .eq('id', id)
     .eq('isActive', true)
     .single();
-  if (user.user_metadata.role === 'VOLUNTEER') {
-    query = query.contains('assignments', [{ volunteerId: user.id, isActive: true }]);
+
+  if (childError || !child) {
+    return NextResponse.json({ error: 'Child not found' }, { status: 404 });
   }
-  const { data, error } = await query;
-  if (error || !data) {
-    return NextResponse.json({ error: error?.message || 'Child not found' }, { status: 404 });
-  }
-  return NextResponse.json({ child: data });
+
+  return NextResponse.json({ child }, { status: 200 });
 }
 
 // PUT - Update a child profile

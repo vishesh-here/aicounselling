@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { prisma } from "@/lib/db";
+import { createClient } from '@supabase/supabase-js';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -12,33 +12,23 @@ import { formatDistanceToNow } from "date-fns";
 
 export const dynamic = "force-dynamic";
 
-async function getKnowledgeBaseData() {
-  const [knowledgeBase, culturalStories, totalUsers] = await Promise.all([
-    prisma.knowledgeBase.findMany({
-      include: {
-        createdBy: {
-          select: { name: true }
-        },
-        tags: true
-      },
-      orderBy: { createdAt: "desc" }
-    }),
-    prisma.culturalStory.findMany({
-      include: {
-        createdBy: {
-          select: { name: true }
-        }
-      },
-      orderBy: { createdAt: "desc" }
-    }),
-    prisma.user.count({ where: { role: "VOLUNTEER" } })
-  ]);
-
-  return { knowledgeBase, culturalStories, totalUsers };
+async function getKnowledgeResources() {
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  );
+  const { data, error } = await supabase
+    .from("knowledge_resources")
+    .select("*")
+    .order("created_at", { ascending: false });
+  if (error) throw new Error(error.message);
+  return data || [];
 }
 
 export default async function ManageKnowledgeBasePage() {
-  const { knowledgeBase, culturalStories, totalUsers } = await getKnowledgeBaseData();
+  const resources = await getKnowledgeResources();
+  const knowledgeBase = resources.filter((r: any) => r.type === "knowledge_base");
+  const culturalStories = resources.filter((r: any) => r.type === "cultural_story");
 
   const getCategoryColor = (category: string) => {
     switch (category) {
@@ -126,7 +116,7 @@ export default async function ManageKnowledgeBasePage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-600">Active Users</p>
-                <p className="text-2xl font-bold text-gray-900">{totalUsers}</p>
+                <p className="text-2xl font-bold text-gray-900">{0}</p> {/* Placeholder for total users */}
               </div>
               <Users className="h-8 w-8 text-green-600" />
             </div>
@@ -157,7 +147,7 @@ export default async function ManageKnowledgeBasePage() {
                     <div className="flex items-center gap-2 mb-2">
                       <h3 className="font-medium text-gray-900">{story.title}</h3>
                       <Badge className={`text-xs ${getSourceColor(story.source)}`}>
-                        {story.source.replace('_', ' ')}
+                        {story.source ? story.source.replace('_', ' ') : 'N/A'}
                       </Badge>
                       <Badge variant={story.isActive ? "default" : "secondary"} className="text-xs">
                         {story.isActive ? "Active" : "Inactive"}
@@ -167,9 +157,9 @@ export default async function ManageKnowledgeBasePage() {
                     <p className="text-sm text-gray-600 mb-2 line-clamp-2">{story.summary}</p>
                     
                     <div className="flex items-center gap-4 text-xs text-gray-500">
-                      <span>Created by: {story.createdBy?.name}</span>
+                      <span>Created by: {story.created_by}</span>
                       <span>•</span>
-                      <span>{formatDistanceToNow(new Date(story.createdAt))} ago</span>
+                      <span>{formatDistanceToNow(new Date(story.created_at))} ago</span>
                       <span>•</span>
                       <span>{story.themes?.length || 0} themes</span>
                     </div>
@@ -230,13 +220,13 @@ export default async function ManageKnowledgeBasePage() {
                       <Badge className={`text-xs ${getCategoryColor(resource.category)}`}>
                         {resource.category.replace('_', ' ')}
                       </Badge>
-                      {resource.subCategory && (
+                      {resource.sub_category && (
                         <Badge variant="outline" className="text-xs">
-                          {resource.subCategory}
+                          {resource.sub_category}
                         </Badge>
                       )}
-                      <Badge variant={resource.isActive ? "default" : "secondary"} className="text-xs">
-                        {resource.isActive ? "Active" : "Inactive"}
+                      <Badge variant={resource.is_active ? "default" : "secondary"} className="text-xs">
+                        {resource.is_active ? "Active" : "Inactive"}
                       </Badge>
                     </div>
                     
@@ -245,15 +235,15 @@ export default async function ManageKnowledgeBasePage() {
                     </p>
                     
                     <div className="flex items-center gap-4 text-xs text-gray-500">
-                      <span>Created by: {resource.createdBy?.name}</span>
+                      <span>Created by: {resource.created_by}</span>
                       <span>•</span>
-                      <span>{formatDistanceToNow(new Date(resource.createdAt))} ago</span>
+                      <span>{formatDistanceToNow(new Date(resource.created_at))} ago</span>
                       <span>•</span>
                       <span>{resource.tags?.length || 0} tags</span>
-                      {resource.fileType && (
+                      {resource.file_type && (
                         <>
                           <span>•</span>
-                          <span className="uppercase">{resource.fileType}</span>
+                          <span className="uppercase">{resource.file_type}</span>
                         </>
                       )}
                     </div>

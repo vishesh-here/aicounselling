@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
-import { prisma } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
@@ -19,40 +18,55 @@ function getSupabaseWithAuth(req: NextRequest) {
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { child_id: string } }
+  { params }: { params: { childId: string } }
 ) {
   try {
-    const supabase = getSupabaseWithAuth(request);
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-    if (!user) {
+    // Extract access token from Authorization header
+    const authHeader = request.headers.get('authorization');
+    let accessToken = null;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      accessToken = authHeader.replace('Bearer ', '');
+    }
+    console.log('Access token (history):', accessToken);
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    );
+    // Authenticate user using the access token
+    let user = null;
+    if (accessToken) {
+      const { data, error } = await supabase.auth.getUser(accessToken);
+      if (error || !data?.user) {
+        console.log('Supabase user error (history):', error);
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      }
+      user = data.user;
+    } else {
+      console.log('No access token provided (history)');
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    console.log('Supabase user (history):', user);
 
-    const { child_id } = params;
+    const { childId } = params;
+    console.log('API received childId:', childId);
 
     // Get all conversations for this child with message counts
-    const conversations = await prisma.aiChatConversation.findMany({
-      where: {
-        child_id: child_id,
-        isActive: true
-      },
-      include: {
-        messages: {
-          orderBy: { timestamp: "asc" }
-        },
-        session: {
-          select: {
-            id: true,
-            startedAt: true,
-            status: true
-          }
-        }
-      },
-      orderBy: { createdAt: "desc" }
-    });
+    const { data: conversations, error: convErr } = await supabase
+      .from('ai_chat_conversations')
+      .select('*, messages:ai_chat_messages(*), session:sessions(id, startedAt, status)')
+      .eq('child_id', childId)
+      .eq('isActive', true)
+      .order('createdAt', { ascending: false });
+
+    console.log('Conversations found:', conversations?.length);
+
+    if (convErr) {
+      console.error('Supabase conversation fetch error:', convErr);
+      return NextResponse.json({ success: false, error: 'Failed to fetch conversations' }, { status: 500 });
+    }
 
     // Format the conversations for the frontend
-    const formattedConversations = conversations.map(conv => ({
+    const formattedConversations = (conversations || []).map(conv => ({
       id: conv.id,
       sessionId: conv.sessionId,
       conversationName: conv.conversationName || `Conversation ${conv.id.slice(-6)}`,
@@ -67,7 +81,7 @@ export async function GET(
         startedAt: conv.session.startedAt,
         status: conv.session.status
       } : null,
-      messages: conv.messages.map(msg => ({
+      messages: conv.messages.map((msg: any) => ({
         id: msg.id,
         role: msg.role,
         content: msg.content,
