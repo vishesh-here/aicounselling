@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { prisma } from "@/lib/db";
 import { createClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
+import { staticContextCache } from "../../ai/rag-context/route";
 
 export const dynamic = "force-dynamic";
 
@@ -77,6 +78,11 @@ export async function POST(request: NextRequest) {
         .insert({ ...summaryPayload, createdAt: new Date().toISOString() });
     }
     if (result.error) throw result.error;
+
+    // Invalidate static RAG context cache for this child
+    if (sessionRecord && sessionRecord.child_id) {
+      staticContextCache.delete(sessionRecord.child_id);
+    }
 
     // Update concerns table for new and resolved concerns
     const childId = sessionRecord.child_id;

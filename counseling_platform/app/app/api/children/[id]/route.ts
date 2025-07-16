@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
 import { NextRequest, NextResponse } from 'next/server';
+import { staticContextCache } from "../../ai/rag-context/route";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -180,6 +181,9 @@ export async function PUT(
         updatedAt: new Date()
       }
     });
+
+    // Invalidate static RAG context cache for this child
+    staticContextCache.delete(id);
 
     return NextResponse.json({
       message: 'Child profile updated successfully',

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabase } from "@/lib/supabaseClient";
+import { staticContextCache } from "../../ai/rag-context/route";
 
 export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -16,6 +17,10 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       .single();
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+    // Invalidate static RAG context cache for this child
+    if (data && data.child_id) {
+      staticContextCache.delete(data.child_id);
     }
     return NextResponse.json({ concern: data });
   } catch (err) {
