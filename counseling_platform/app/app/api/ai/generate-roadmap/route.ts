@@ -28,9 +28,13 @@ export async function POST(request: NextRequest) {
     const { childProfile, activeConcerns, recentSessions } = body;
 
     // Fetch RAG context (relevant knowledge chunks)
+    const authHeader = request.headers.get("authorization");
     const ragRes = await fetch(`${process.env.NEXTAUTH_URL || "http://localhost:3000"}/api/ai/rag-context`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...(authHeader ? { Authorization: authHeader } : {})
+      },
       body: JSON.stringify({ child_id: childProfile.id })
     });
     let ragChunks = [];

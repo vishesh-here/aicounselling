@@ -29,6 +29,8 @@ import {
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { createClient } from '@supabase/supabase-js';
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
+import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -74,6 +76,9 @@ export default function AiMentorPage() {
   const [showHistory, setShowHistory] = useState(true);
   const [expandedConversations, setExpandedConversations] = useState<Set<string>>(new Set());
   const [showSuggestions, setShowSuggestions] = useState(true);
+  const [latestRagContext, setLatestRagContext] = useState<any>(null); // Store full context object
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [showRagModal, setShowRagModal] = useState(false);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
@@ -294,6 +299,13 @@ export default function AiMentorPage() {
         loadConversationHistory();
       }
 
+      // Store latest RAG context if present
+      if (data.ragContext) {
+        setLatestRagContext(data.ragContext);
+      } else {
+        setLatestRagContext(null);
+      }
+
     } catch (error) {
       console.error('[sendMessage] Error:', error);
       toast.error("Failed to get AI response. Please try again.");
@@ -385,6 +397,16 @@ export default function AiMentorPage() {
   useEffect(() => {
     console.log('Rendering currentMessages:', currentMessages);
   }, [currentMessages]);
+
+  useEffect(() => {
+    const getSession = async () => {
+      const { data } = await supabase.auth.getSession();
+      const user = data.session?.user;
+      const role = user?.user_metadata?.role || user?.app_metadata?.role;
+      setIsAdmin(role === "ADMIN");
+    };
+    getSession();
+  }, []);
 
   if (loading) {
     return (
@@ -612,15 +634,23 @@ export default function AiMentorPage() {
           {/* Messages */}
           <ScrollArea className="flex-1 p-4" ref={scrollAreaRef}>
             <div className="max-w-4xl mx-auto space-y-4">
-              {currentMessages.map((message) => (
-                <ChatMessage
-                  key={message.id}
-                  role={message.role}
-                  content={message.content}
-                  timestamp={message.timestamp}
-                  metadata={message.metadata}
-                />
-              ))}
+              {currentMessages.map((message, idx) => {
+                const isLatestAI =
+                  message.role === "ASSISTANT" &&
+                  idx === currentMessages.length - 1;
+                return (
+                  <ChatMessage
+                    key={message.id}
+                    role={message.role}
+                    content={message.content}
+                    timestamp={message.timestamp}
+                    metadata={message.metadata}
+                    isAdmin={isAdmin && isLatestAI}
+                    ragContext={isLatestAI && latestRagContext ? latestRagContext.knowledgeChunks : undefined}
+                    onShowRagModal={isLatestAI ? () => setShowRagModal(true) : undefined}
+                  />
+                );
+              })}
               
               {isLoading && (
                 <div className="max-w-4xl mx-auto">
@@ -631,6 +661,55 @@ export default function AiMentorPage() {
               <div ref={messagesEndRef} />
             </div>
           </ScrollArea>
+          {/* RAG Debug Modal */}
+          {showRagModal && latestRagContext && (
+            <Dialog open={showRagModal} onOpenChange={setShowRagModal}>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>RAG Context Used</DialogTitle>
+                </DialogHeader>
+                <div className="overflow-x-auto space-y-4">
+                  {/* Knowledge Chunks */}
+                  <div>
+                    <h3 className="font-semibold mb-2">Knowledge Chunks</h3>
+                    <table className="min-w-full text-xs">
+                      <thead>
+                        <tr>
+                          <th className="px-2 py-1 text-left">Similarity</th>
+                          <th className="px-2 py-1 text-left">Content</th>
+                          <th className="px-2 py-1 text-left">Chunk ID</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {latestRagContext.knowledgeChunks?.sort((a: any, b: any) => (b.similarity ?? 0) - (a.similarity ?? 0)).map((chunk: any, i: number) => (
+                          <tr key={chunk.id || i}>
+                            <td className="px-2 py-1">{chunk.similarity?.toFixed(3) ?? "-"}</td>
+                            <td className="px-2 py-1 max-w-xs truncate" title={chunk.content}>{chunk.content?.slice(0, 100) ?? "-"}</td>
+                            <td className="px-2 py-1">{chunk.id}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  {/* Child Profile */}
+                  <div>
+                    <h3 className="font-semibold mb-2">Child Profile</h3>
+                    <pre className="bg-gray-100 p-2 rounded text-xs overflow-x-auto">{JSON.stringify(latestRagContext.childProfile, null, 2)}</pre>
+                  </div>
+                  {/* Active Concerns */}
+                  <div>
+                    <h3 className="font-semibold mb-2">Active Concerns</h3>
+                    <pre className="bg-gray-100 p-2 rounded text-xs overflow-x-auto">{JSON.stringify(latestRagContext.activeConcerns, null, 2)}</pre>
+                  </div>
+                  {/* Session Summaries */}
+                  <div>
+                    <h3 className="font-semibold mb-2">Session Summaries</h3>
+                    <pre className="bg-gray-100 p-2 rounded text-xs overflow-x-auto">{JSON.stringify(latestRagContext.sessionSummaries, null, 2)}</pre>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
+          )}
 
           {/* Chat Input */}
           <div className="bg-white border-t border-gray-200 p-4">
