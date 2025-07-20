@@ -28,9 +28,13 @@ export async function POST(request: NextRequest) {
     const { childProfile, activeConcerns, recentSessions } = body;
 
     // Fetch RAG context (relevant knowledge chunks)
+    const authHeader = request.headers.get("authorization");
     const ragRes = await fetch(`${process.env.NEXTAUTH_URL || "http://localhost:3000"}/api/ai/rag-context`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...(authHeader ? { Authorization: authHeader } : {})
+      },
       body: JSON.stringify({ child_id: childProfile.id })
     });
     let ragChunks = [];
@@ -55,7 +59,7 @@ ${activeConcerns?.map((concern: any) =>
 
 Recent Session History:
 ${recentSessions?.map((session: any, index: number) => 
-  `Session ${index + 1}: ${session.summary || "No summary"} (Status: ${session.resolutionStatus || "Unknown"})`
+  `Session ${index + 1}: ${session.summary || "No summary"} (Effectiveness: ${session.effectiveness || "Unknown"})`
 ).join("\n") || "No previous sessions"}
 
 Relevant Knowledge Chunks:

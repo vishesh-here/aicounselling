@@ -3,25 +3,42 @@ import { getServerSession } from "next-auth";
 import { prisma } from "@/lib/db";
 import { createClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
+import { staticContextCache } from "../../ai/rag-context/route";
 
 export const dynamic = "force-dynamic";
 
 function getSupabaseWithAuth(req: NextRequest) {
-  const authHeader = req.headers.get('authorization');
-  let globalHeaders: Record<string, string> = {};
-  if (authHeader) {
-    globalHeaders['Authorization'] = authHeader;
-  } else {
-    const cookieStore = cookies();
-    globalHeaders['Cookie'] = cookieStore.toString();
-  }
-  return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, { global: { headers: globalHeaders } });
+  return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
 }
 
 export async function POST(request: NextRequest) {
   try {
     const supabase = getSupabaseWithAuth(request);
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    
+    // Authenticate user separately
+    const authHeader = request.headers.get('authorization');
+    let user = null;
+    
+    if (authHeader) {
+      // Extract token from Authorization header
+      const token = authHeader.replace('Bearer ', '');
+      const { data: { user: authUser }, error: userError } = await supabase.auth.getUser(token);
+      if (userError) {
+        console.error('Auth error:', userError);
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      }
+      user = authUser;
+    } else {
+      // Try to get user from cookies
+      const cookieStore = cookies();
+      const { data: { user: authUser }, error: userError } = await supabase.auth.getUser();
+      if (userError) {
+        console.error('Auth error:', userError);
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      }
+      user = authUser;
+    }
+    
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -48,21 +65,21 @@ export async function POST(request: NextRequest) {
 
     // Prepare the summary data for database
     const summaryPayload = {
-      sessionId,
+      sessionid: sessionId,
       summary: summaryData.summary,
       effectiveness: summaryData.effectiveness,
       followup_notes: summaryData.followup_notes,
       new_concerns: summaryData.new_concerns,
       resolved_concerns: summaryData.resolved_concerns,
       next_session_date: summaryData.next_session_date ? summaryData.next_session_date : null,
-      updatedAt: new Date().toISOString(),
+      updatedat: new Date().toISOString(),
     };
 
     // Upsert session summary
     const { data: existingSummary, error: findError } = await supabase
       .from('session_summaries')
       .select('*')
-      .eq('sessionId', sessionId)
+      .eq('sessionid', sessionId)
       .maybeSingle();
     if (findError) throw findError;
     let result;
@@ -70,13 +87,18 @@ export async function POST(request: NextRequest) {
       result = await supabase
         .from('session_summaries')
         .update(summaryPayload)
-        .eq('sessionId', sessionId);
+        .eq('sessionid', sessionId);
     } else {
       result = await supabase
         .from('session_summaries')
-        .insert({ ...summaryPayload, createdAt: new Date().toISOString() });
+        .insert({ ...summaryPayload, createdat: new Date().toISOString() });
     }
     if (result.error) throw result.error;
+
+    // Invalidate static RAG context cache for this child
+    if (sessionRecord && sessionRecord.child_id) {
+      staticContextCache.delete(sessionRecord.child_id);
+    }
 
     // Update concerns table for new and resolved concerns
     const childId = sessionRecord.child_id;
@@ -136,7 +158,31 @@ export async function POST(request: NextRequest) {
 export async function GET(request: NextRequest) {
   try {
     const supabase = getSupabaseWithAuth(request);
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    
+    // Authenticate user separately
+    const authHeader = request.headers.get('authorization');
+    let user = null;
+    
+    if (authHeader) {
+      // Extract token from Authorization header
+      const token = authHeader.replace('Bearer ', '');
+      const { data: { user: authUser }, error: userError } = await supabase.auth.getUser(token);
+      if (userError) {
+        console.error('Auth error:', userError);
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      }
+      user = authUser;
+    } else {
+      // Try to get user from cookies
+      const cookieStore = cookies();
+      const { data: { user: authUser }, error: userError } = await supabase.auth.getUser();
+      if (userError) {
+        console.error('Auth error:', userError);
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      }
+      user = authUser;
+    }
+    
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -148,20 +194,14 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Session ID is required" }, { status: 400 });
     }
 
-    // Get session summary
-    const summary = await prisma.sessionSummary.findUnique({
-      where: { sessionId },
-      include: {
-        session: {
-          include: {
-            child: true,
-            volunteer: true
-          }
-        }
-      }
-    });
+    // Get session summary using Supabase
+    const { data: summary, error: summaryError } = await supabase
+      .from('session_summaries')
+      .select('*, session:sessions(*, child:children(*), volunteer:users(*))')
+      .eq('sessionid', sessionId)
+      .single();
 
-    if (!summary) {
+    if (summaryError || !summary) {
       return NextResponse.json({ error: "Summary not found" }, { status: 404 });
     }
 

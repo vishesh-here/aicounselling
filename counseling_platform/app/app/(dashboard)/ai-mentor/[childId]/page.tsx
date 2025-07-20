@@ -53,7 +53,13 @@ interface ConversationHistory {
   sessionId?: string;
   conversationName?: string;
   createdAt: Date;
-  messages: ChatMessageType[];
+  messageCount: number;
+  lastMessageAt: Date;
+  sessionInfo?: {
+    id: string;
+    startedAt: Date;
+    status: string;
+  } | null;
   isActive: boolean;
 }
 
@@ -166,10 +172,7 @@ export default function AiMentorPage() {
         setConversationHistory(
           (data.conversations || []).map((conv: any) => ({
             ...conv,
-            messages: (conv.messages || []).map((msg: any) => ({
-              ...msg,
-              timestamp: new Date(msg.timestamp)
-            }))
+            lastMessageAt: new Date(conv.lastMessageAt)
           }))
         );
         // If there is a sessionId in the most recent conversation, set it
@@ -445,7 +448,7 @@ export default function AiMentorPage() {
                         {new Date(conversation.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </div>
                       <Badge variant="secondary" className="text-xs mt-1">
-                        {conversation.messages.length} messages
+                        {conversation.messageCount || 0} messages
                       </Badge>
                     </div>
                     
@@ -475,25 +478,9 @@ export default function AiMentorPage() {
 
                   {expandedConversations.has(conversation.id) && (
                     <div className="mt-2 pt-2 border-t border-gray-100">
-                      <div className="space-y-1 max-h-32 overflow-y-auto">
-                        {conversation.messages.slice(0, 3).map((message, idx) => (
-                          <div key={idx} className="text-xs">
-                            <span className={cn(
-                              "font-medium",
-                              message.role === "USER" ? "text-blue-600" : "text-purple-600"
-                            )}>
-                              {message.role === "USER" ? "You" : "AI"}:
-                            </span>
-                            <span className="text-gray-600 ml-1">
-                              {message.content.slice(0, 50)}...
-                            </span>
-                          </div>
-                        ))}
-                        {conversation.messages.length > 3 && (
-                          <p className="text-xs text-gray-400">
-                            +{conversation.messages.length - 3} more messages
-                          </p>
-                        )}
+                      <div className="text-xs text-gray-500">
+                        <p>Click to view full conversation</p>
+                        <p>Last message: {new Date(conversation.lastMessageAt).toLocaleString()}</p>
                       </div>
                     </div>
                   )}

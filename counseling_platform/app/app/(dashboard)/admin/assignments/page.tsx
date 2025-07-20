@@ -1,5 +1,4 @@
 'use client';
-import { createClient } from '@supabase/supabase-js';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { AssignmentManager } from "@/components/admin/assignment-manager";
@@ -7,59 +6,81 @@ import { AlertTriangle } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { useState, useEffect } from "react";
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-const supabase = createClient(supabaseUrl, supabaseKey);
+import { supabase } from "@/lib/supabaseClient";
 
 export const dynamic = "force-dynamic";
 
 export default function AssignmentsPage() {
-  const [children, setChildren] = useState([]);
-  const [volunteers, setVolunteers] = useState([]);
-  const [assignments, setAssignments] = useState([]);
+  const [children, setChildren] = useState<any[]>([]);
+  const [volunteers, setVolunteers] = useState<any[]>([]);
+  const [assignments, setAssignments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
-      const { data: { user } } = await supabase.auth.getUser();
-      const role = user?.user_metadata?.role || user?.app_metadata?.role;
-      if (!user || role !== 'ADMIN') {
-        setIsAdmin(false);
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const accessToken = session?.access_token;
+        
+        if (!accessToken) {
+          setIsAdmin(false);
+          setLoading(false);
+          return;
+        }
+
+        // Get user info to check if admin
+        const { data: { user } } = await supabase.auth.getUser();
+        const role = user?.user_metadata?.role || user?.app_metadata?.role;
+        if (!user || role !== 'ADMIN') {
+          setIsAdmin(false);
+          setLoading(false);
+          return;
+        }
+        
+        setIsAdmin(true);
+        
+        // Fetch children
+        const childrenResponse = await fetch('/api/children', {
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        if (childrenResponse.ok) {
+          const childrenData = await childrenResponse.json();
+          setChildren(childrenData.children || []);
+        }
+
+        // Fetch volunteers
+        const volunteersResponse = await fetch('/api/admin/volunteers', {
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        if (volunteersResponse.ok) {
+          const volunteersData = await volunteersResponse.json();
+          setVolunteers(volunteersData.volunteers || []);
+        }
+
+        // Fetch assignments
+        const assignmentsResponse = await fetch('/api/admin/assignments', {
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        if (assignmentsResponse.ok) {
+          const assignmentsData = await assignmentsResponse.json();
+          setAssignments(assignmentsData.assignments || []);
+        }
+      } catch (error) {
+        console.error('Error fetching data:', error);
+      } finally {
         setLoading(false);
-        return;
       }
-      setIsAdmin(true);
-      // Fetch children
-      const { data: childrenData, error: childrenError } = await supabase
-        .from('children')
-        .select('*, assignments(*, volunteer:users(id, name, specialization)), concerns(*)')
-        .eq('isActive', true);
-      if (childrenError) throw childrenError;
-      console.log('Fetched children:', childrenData);
-      setChildren(childrenData || []);
-      // Fetch all users, then filter for volunteers in client
-      const { data: allUsers, error: usersError } = await supabase
-        .from('users')
-        .select('id, name, email, specialization, state, user_metadata, app_metadata, approval_status, isActive');
-      if (usersError) throw usersError;
-      const volunteersData = (allUsers || []).filter(u => {
-        const role = u.user_metadata?.role || u.app_metadata?.role;
-        return role === 'VOLUNTEER' && u.approval_status === 'APPROVED' && u.isActive;
-      });
-      console.log('Fetched volunteers:', volunteersData);
-      setVolunteers(volunteersData);
-      // Fetch assignments
-      const { data: assignmentsData, error: assignmentsError } = await supabase
-        .from('assignments')
-        .select('*, child_id, volunteerId')
-        .eq('isActive', true);
-      if (assignmentsError) throw assignmentsError;
-      console.log('Fetched assignments:', assignmentsData);
-      setAssignments(assignmentsData || []);
-      setLoading(false);
     };
     fetchData();
   }, []);
@@ -129,11 +150,7 @@ export default function AssignmentsPage() {
       </div>
 
       {/* Assignment Manager Component */}
-      <AssignmentManager 
-        children={children}
-        volunteers={volunteers}
-        assignments={assignments}
-      />
+      <AssignmentManager />
     </div>
   );
 }

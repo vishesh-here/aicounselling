@@ -3,11 +3,7 @@
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Users, Calendar, BookOpen, TrendingUp, Heart, UserCheck } from "lucide-react";
-import { createClient } from '@supabase/supabase-js';
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-const supabase = createClient(supabaseUrl, supabaseKey);
+import { supabase } from "@/lib/supabaseClient";
 
 export default function DashboardStats() {
   const [stats, setStats] = useState<any>(null);
@@ -17,44 +13,54 @@ export default function DashboardStats() {
   useEffect(() => {
     const fetchStats = async () => {
       setLoading(true);
-      const { data: { user } } = await supabase.auth.getUser();
-      const role = user?.user_metadata?.role || user?.app_metadata?.role;
-      if (!user || role !== 'ADMIN') {
-        setIsAdmin(false);
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const accessToken = session?.access_token;
+        
+        if (!accessToken) {
+          setIsAdmin(false);
+          setLoading(false);
+          return;
+        }
+
+        // Get user info to check if admin
+        const { data: { user } } = await supabase.auth.getUser();
+        const role = user?.user_metadata?.role || user?.app_metadata?.role;
+        if (!user || role !== 'ADMIN') {
+          setIsAdmin(false);
+          setLoading(false);
+          return;
+        }
+        
+        setIsAdmin(true);
+        
+        // Fetch stats from API endpoint
+        const response = await fetch('/api/dashboard/stats', {
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        setStats(data.stats);
+      } catch (error) {
+        console.error('Error fetching dashboard stats:', error);
+        setStats({
+          totalChildren: 0,
+          assignedChildren: 0,
+          unassignedChildren: 0,
+          totalVolunteers: 0,
+          activeAssignments: 0,
+          totalSessions: 0,
+        });
+      } finally {
         setLoading(false);
-        return;
       }
-      setIsAdmin(true);
-      // Fetch children
-      const { data: childrenData, error: childrenError } = await supabase
-        .from('children')
-        .select('*, assignments(*), concerns(*), sessions(*)')
-        .eq('isActive', true);
-      if (childrenError) throw childrenError;
-      // Fetch volunteers
-      const { data: allUsers, error: usersError } = await supabase
-        .from('users')
-        .select('id, name, email, role, state, isActive, approvalStatus');
-      if (usersError) throw usersError;
-      const volunteers = (allUsers || []).filter(u => {
-        return u.role === 'VOLUNTEER' && u.approvalStatus === 'APPROVED' && u.isActive;
-      });
-      // Fetch sessions
-      const { data: sessionsData, error: sessionsError } = await supabase
-        .from('sessions')
-        .select('*');
-      if (sessionsError) throw sessionsError;
-      // Aggregate stats
-      setStats({
-        totalChildren: childrenData.length,
-        assignedChildren: childrenData.filter(child => child.assignments && child.assignments.length > 0).length,
-        unassignedChildren: childrenData.filter(child => !child.assignments || child.assignments.length === 0).length,
-        totalVolunteers: volunteers.length,
-        activeAssignments: childrenData.reduce((acc, child) => acc + (child.assignments ? child.assignments.length : 0), 0),
-        totalSessions: sessionsData.length,
-        // Add more stats as needed
-      });
-      setLoading(false);
     };
     fetchStats();
   }, []);

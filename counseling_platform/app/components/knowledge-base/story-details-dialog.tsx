@@ -74,7 +74,7 @@ export function StoryDetailsDialog({ story, trigger }: StoryDetailsDialogProps) 
                   <span>{story.createdBy?.name}</span>
                   <span className="mx-2">•</span>
                   <Calendar className="h-3 w-3 mr-1" />
-                  <span>{formatDistanceToNow(new Date(story.created_at))} ago</span>
+                                      <span>{story.createdAt ? formatDistanceToNow(new Date(story.createdAt)) + ' ago' : 'Recently'}</span>
                 </div>
               </div>
               

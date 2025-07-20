@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+
 import { 
   User, Users, UserPlus, Search, Filter, 
   MapPin, AlertCircle, CheckCircle, X
@@ -30,45 +30,74 @@ export function AssignmentManager() {
   const [selectedChild, setSelectedChild] = useState<any>(null);
 
   useEffect(() => {
-    // Fetch children, volunteers, and assignments from Supabase
+    // Fetch children, volunteers, and assignments from API
     const fetchData = async () => {
-      const { data: childrenData, error: childrenError } = await supabase
-        .from('children')
-        .select('*, assignments(*, volunteer:users(id, name, specialization)), concerns(*)')
-        .eq('isActive', true);
-      if (childrenError) toast.error(childrenError.message);
-      console.log('Fetched children:', childrenData);
-      setChildren(childrenData || []);
-      // Fetch all users, then filter for volunteers and admins in client
-      const { data: allUsers, error: usersError } = await supabase
-        .from('users')
-        .select('id, name, email, specialization, state, role, isActive');
-      if (usersError) toast.error(usersError.message);
-      const volunteersData = (allUsers || []).filter(u => {
-        const role = u.role;
-        return (role === 'VOLUNTEER' || role === 'ADMIN') && u.isActive;
-      });
-      console.log('Fetched volunteers:', volunteersData);
-      setVolunteers(volunteersData);
-      const { data: assignmentsData, error: assignmentsError } = await supabase
-        .from('assignments')
-        .select('*, child_id, volunteerId')
-        .eq('isActive', true);
-      if (assignmentsError) toast.error(assignmentsError.message);
-      console.log('Fetched assignments:', assignmentsData);
-      setAssignments(assignmentsData || []);
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const accessToken = session?.access_token;
+        
+        if (!accessToken) {
+          toast.error('No valid session');
+          return;
+        }
+
+        // Fetch children
+        const childrenResponse = await fetch('/api/children', {
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        if (childrenResponse.ok) {
+          const childrenData = await childrenResponse.json();
+          setChildren(childrenData.children || []);
+        } else {
+          toast.error('Failed to fetch children');
+        }
+
+        // Fetch volunteers
+        const volunteersResponse = await fetch('/api/admin/volunteers', {
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        if (volunteersResponse.ok) {
+          const volunteersData = await volunteersResponse.json();
+          setVolunteers(volunteersData.volunteers || []);
+        } else {
+          toast.error('Failed to fetch volunteers');
+        }
+
+        // Fetch assignments
+        const assignmentsResponse = await fetch('/api/admin/assignments', {
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        if (assignmentsResponse.ok) {
+          const assignmentsData = await assignmentsResponse.json();
+          setAssignments(assignmentsData.assignments || []);
+        } else {
+          toast.error('Failed to fetch assignments');
+        }
+      } catch (error) {
+        console.error('Error fetching data:', error);
+        toast.error('Failed to fetch data');
+      }
     };
     fetchData();
   }, []);
 
   // Filter children based on search and filters
   const filteredChildren = children.filter(child => {
-    const matchesSearch = child.name.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch = child.fullName?.toLowerCase().includes(searchTerm.toLowerCase()) || false;
     const matchesState = selectedState === "all" || child.state === selectedState;
     const matchesAssignment = 
       assignmentFilter === "all" ||
-      (assignmentFilter === "assigned" && child.assignments.length > 0) ||
-      (assignmentFilter === "unassigned" && child.assignments.length === 0);
+      (assignmentFilter === "assigned" && (child.assignments || []).length > 0) ||
+      (assignmentFilter === "unassigned" && (child.assignments || []).length === 0);
 
     return matchesSearch && matchesState && matchesAssignment;
   });
@@ -79,64 +108,136 @@ export function AssignmentManager() {
   // Assign volunteer to child
   const assignVolunteer = async (child_id: string, volunteerId: string) => {
     setIsAssigning(true);
-    const { data, error } = await supabase
-      .from('assignments')
-      .insert([{ child_id: child_id, volunteerId: volunteerId, isActive: true }]);
-    if (error) {
-      toast.error(error.message || 'Failed to create assignment');
-    } else {
-      toast.success('Assignment created successfully!');
-      // Refresh data
-      const { data: assignmentsData } = await supabase
-        .from('assignments')
-        .select('*')
-        .eq('isActive', true);
-      setAssignments(assignmentsData || []);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const accessToken = session?.access_token;
+      
+      if (!accessToken) {
+        toast.error('No valid session');
+        return;
+      }
+
+      const response = await fetch('/api/admin/assignments', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          action: 'assign',
+          child_id,
+          volunteerId
+        })
+      });
+
+      const result = await response.json();
+      console.log('Assignment response:', result);
+      if (response.ok) {
+        toast.success(result.message || 'Assignment created successfully!');
+        // Refresh assignments data
+        const assignmentsResponse = await fetch(`/api/admin/assignments?t=${Date.now()}`, {
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        if (assignmentsResponse.ok) {
+          const assignmentsData = await assignmentsResponse.json();
+          setAssignments(assignmentsData.assignments || []);
+        }
+        // Also refresh children data to update the UI
+        const childrenResponse = await fetch(`/api/children?t=${Date.now()}`, {
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        if (childrenResponse.ok) {
+          const childrenData = await childrenResponse.json();
+          setChildren(childrenData.children || []);
+        }
+        return true; // Indicate success
+      } else {
+        console.error('Assignment error:', result.error);
+        toast.error(result.error || 'Failed to create assignment');
+        return false; // Indicate failure
+      }
+    } catch (error) {
+      console.error('Error assigning volunteer:', error);
+      toast.error('Failed to create assignment');
+      return false; // Indicate failure
+    } finally {
+      setIsAssigning(false);
     }
-    setIsAssigning(false);
   };
 
   // Remove assignment
   const removeAssignment = async (assignmentId: string) => {
-    const { data, error } = await supabase
-      .from('assignments')
-      .update({ isActive: false })
-      .eq('id', assignmentId);
-    if (error) {
-      toast.error(error.message || 'Failed to remove assignment');
-    } else {
-      toast.success('Assignment removed successfully!');
-      // Refresh data
-      const { data: assignmentsData } = await supabase
-        .from('assignments')
-        .select('*')
-        .eq('isActive', true);
-      setAssignments(assignmentsData || []);
-    }
-  };
-
-  // Bulk assign volunteers based on state matching
-  const bulkAssignByState = async () => {
-    const unassignedChildren = children.filter(child => child.assignments.length === 0);
-    const assignmentPromises = unassignedChildren.map(child => {
-      const matchingVolunteer = volunteers.find(volunteer => 
-        volunteer.state === child.state && 
-        !assignments.some(assignment => assignment.volunteerId === volunteer.id && assignment.isActive)
-      );
-
-      if (matchingVolunteer) {
-        return assignVolunteer(child.id, matchingVolunteer.id);
-      }
-      return Promise.resolve();
-    });
-
+    console.log('Removing assignment with ID:', assignmentId);
     try {
-      await Promise.all(assignmentPromises);
-      toast.success("Bulk assignment completed!");
+      const { data: { session } } = await supabase.auth.getSession();
+      const accessToken = session?.access_token;
+      
+      if (!accessToken) {
+        toast.error('No valid session');
+        return;
+      }
+
+      if (!assignmentId) {
+        console.error('No assignment ID provided');
+        toast.error('Invalid assignment ID');
+        return;
+      }
+
+      const response = await fetch('/api/admin/assignments', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          action: 'remove',
+          assignment_id: assignmentId
+        })
+      });
+
+      const result = await response.json();
+      console.log('Remove assignment response:', result);
+      
+      if (response.ok) {
+        toast.success('Assignment removed successfully!');
+        // Refresh assignments data
+        const assignmentsResponse = await fetch(`/api/admin/assignments?t=${Date.now()}`, {
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        if (assignmentsResponse.ok) {
+          const assignmentsData = await assignmentsResponse.json();
+          setAssignments(assignmentsData.assignments || []);
+        }
+        // Also refresh children data to update the UI
+        const childrenResponse = await fetch(`/api/children?t=${Date.now()}`, {
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        if (childrenResponse.ok) {
+          const childrenData = await childrenResponse.json();
+          setChildren(childrenData.children || []);
+        }
+      } else {
+        toast.error(result.error || 'Failed to remove assignment');
+      }
     } catch (error) {
-      toast.error("Some assignments failed");
+      console.error('Error removing assignment:', error);
+      toast.error('Failed to remove assignment');
     }
   };
+
+
 
   return (
     <div className="space-y-6">
@@ -182,39 +283,28 @@ export function AssignmentManager() {
                 <SelectItem value="unassigned">Unassigned Only</SelectItem>
               </SelectContent>
             </Select>
-            <Button onClick={bulkAssignByState} variant="outline">
-              <Users className="h-4 w-4 mr-2" />
-              Bulk Assign by State
-            </Button>
           </div>
         </CardContent>
       </Card>
 
-      <Tabs defaultValue="children" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="children" className="flex items-center gap-2">
-            <User className="h-4 w-4" />
-            Children Management
-          </TabsTrigger>
-          <TabsTrigger value="assignments" className="flex items-center gap-2">
-            <Users className="h-4 w-4" />
-            Current Assignments
-          </TabsTrigger>
-        </TabsList>
+      <div className="space-y-6">
+        <div className="flex items-center gap-2">
+          <User className="h-4 w-4" />
+          <h2 className="text-lg font-semibold">Children Management</h2>
+        </div>
 
-        <TabsContent value="children">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {filteredChildren.map((child) => (
               <Card key={child.id} className="relative">
                 <CardHeader className="pb-3">
                   <div className="flex items-start justify-between">
                     <div>
-                      <CardTitle className="text-lg">{child.name}</CardTitle>
+                      <CardTitle className="text-lg">{child.fullName}</CardTitle>
                       <p className="text-sm text-gray-600">
-                        {child.age} years old • {child.state}
+                        {child.dateOfBirth ? Math.floor((new Date().getTime() - new Date(child.dateOfBirth).getTime()) / (1000 * 60 * 60 * 24 * 365.25)) : 'N/A'} years old • {child.state}
                       </p>
                     </div>
-                    {child.assignments.length > 0 ? (
+                    {(child.assignments || []).length > 0 ? (
                       <Badge className="bg-green-100 text-green-800">
                         <CheckCircle className="h-3 w-3 mr-1" />
                         Assigned
@@ -228,15 +318,15 @@ export function AssignmentManager() {
                   </div>
                 </CardHeader>
                 <CardContent className="pt-0">
-                  {child.assignments.length > 0 ? (
+                  {(child.assignments || []).length > 0 ? (
                     <div className="space-y-2">
-                      {child.assignments.map((assignment: any) => (
+                      {(child.assignments || []).map((assignment: any) => (
                         <div key={assignment.id} className="p-2 bg-gray-50 rounded border">
                           <div className="flex items-center justify-between">
                             <div>
-                              <p className="font-medium text-sm">{assignment.volunteer.name}</p>
-                              <p className="text-xs text-gray-600">{assignment.volunteer.email}</p>
-                              {assignment.volunteer.specialization && (
+                              <p className="font-medium text-sm">{assignment.volunteer?.name || 'Unknown Volunteer'}</p>
+                              <p className="text-xs text-gray-600">{assignment.volunteer?.email || 'No email'}</p>
+                              {assignment.volunteer?.specialization && (
                                 <Badge variant="secondary" className="text-xs mt-1">
                                   {assignment.volunteer.specialization}
                                 </Badge>
@@ -245,7 +335,15 @@ export function AssignmentManager() {
                             <Button
                               size="sm"
                               variant="outline"
-                              onClick={() => removeAssignment(assignment.id)}
+                              onClick={() => {
+                                console.log('Assignment object:', assignment);
+                                if (assignment.id) {
+                                  removeAssignment(assignment.id);
+                                } else {
+                                  console.error('Assignment ID not found:', assignment);
+                                  toast.error('Cannot remove assignment: ID not found');
+                                }
+                              }}
                               className="text-red-600 hover:text-red-700"
                             >
                               <X className="h-3 w-3" />
@@ -257,26 +355,26 @@ export function AssignmentManager() {
                   ) : (
                     <div className="space-y-2">
                       <p className="text-sm text-gray-600">No assigned volunteer</p>
-                      {child.concerns.length > 0 && (
+                      {(child.concerns || []).length > 0 && (
                         <div>
                           <p className="text-xs font-medium text-orange-600 mb-1">
-                            Active Concerns: {child.concerns.length}
+                            Active Concerns: {(child.concerns || []).length}
                           </p>
                           <div className="flex flex-wrap gap-1">
-                            {child.concerns.slice(0, 2).map((concern: any) => (
+                            {(child.concerns || []).slice(0, 2).map((concern: any) => (
                               <Badge key={concern.id} variant="outline" className="text-xs">
                                 {concern.category}
                               </Badge>
                             ))}
-                            {child.concerns.length > 2 && (
+                            {(child.concerns || []).length > 2 && (
                               <Badge variant="outline" className="text-xs">
-                                +{child.concerns.length - 2} more
+                                +{(child.concerns || []).length - 2} more
                               </Badge>
                             )}
                           </div>
                         </div>
                       )}
-                      <Dialog>
+                      <Dialog open={selectedChild?.id === child.id} onOpenChange={(open) => !open && setSelectedChild(null)}>
                         <DialogTrigger asChild>
                           <Button 
                             size="sm" 
@@ -289,15 +387,15 @@ export function AssignmentManager() {
                         </DialogTrigger>
                         <DialogContent>
                           <DialogHeader>
-                            <DialogTitle>Assign Volunteer to {child.name}</DialogTitle>
+                            <DialogTitle>Assign Volunteer to {child.fullName}</DialogTitle>
                           </DialogHeader>
                           <div className="space-y-4">
                             <div className="p-3 bg-gray-50 rounded">
-                              <p className="font-medium">{child.name}</p>
-                              <p className="text-sm text-gray-600">{child.age} years old • {child.state}</p>
-                              {child.concerns.length > 0 && (
+                              <p className="font-medium">{child.fullName}</p>
+                              <p className="text-sm text-gray-600">{child.dateOfBirth ? Math.floor((new Date().getTime() - new Date(child.dateOfBirth).getTime()) / (1000 * 60 * 60 * 24 * 365.25)) : 'N/A'} years old • {child.state}</p>
+                              {(child.concerns || []).length > 0 && (
                                 <p className="text-sm text-orange-600 mt-1">
-                                  {child.concerns.length} active concern(s)
+                                  {(child.concerns || []).length} active concern(s)
                                 </p>
                               )}
                             </div>
@@ -319,76 +417,7 @@ export function AssignmentManager() {
               </Card>
             ))}
           </div>
-        </TabsContent>
-
-        <TabsContent value="assignments">
-          <Card>
-            <CardHeader>
-              <CardTitle>Current Assignments Overview</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {assignments.map((assignment) => (
-                  <div key={assignment.id} className="p-4 border rounded-lg">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-4">
-                        <div>
-                          {assignment.child ? (
-                            <>
-                              <p className="font-medium">{assignment.child.name}</p>
-                              <p className="text-sm text-gray-600">
-                                {assignment.child.age} years old • {assignment.child.state}
-                              </p>
-                            </>
-                          ) : (
-                            <p className="text-red-500 font-medium">Child not found</p>
-                          )}
-                        </div>
-                        <div className="text-gray-400">→</div>
-                        <div>
-                          {assignment.volunteer ? (
-                            <>
-                              <p className="font-medium">{assignment.volunteer.name}</p>
-                              <p className="text-sm text-gray-600">{assignment.volunteer.email}</p>
-                              {assignment.volunteer.specialization && (
-                                <Badge variant="secondary" className="text-xs mt-1">
-                                  {assignment.volunteer.specialization}
-                                </Badge>
-                              )}
-                            </>
-                          ) : (
-                            <p className="text-red-500 font-medium">Volunteer not found</p>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <Badge variant="outline">
-                          {new Date(assignment.assignedAt).toLocaleDateString()}
-                        </Badge>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => removeAssignment(assignment.id)}
-                          className="text-red-600 hover:text-red-700"
-                        >
-                          <X className="h-3 w-3 mr-1" />
-                          Remove
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-                {assignments.length === 0 && (
-                  <div className="text-center py-8 text-gray-500">
-                    <Users className="h-8 w-8 mx-auto mb-2 text-gray-400" />
-                    <p>No active assignments found</p>
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+        </div>
     </div>
   );
 }
@@ -396,6 +425,27 @@ export function AssignmentManager() {
 function AssignVolunteerInline({ child, volunteers, assignments, onAssign, onClose, isAssigning }: any) {
   const [selectedVolunteerId, setSelectedVolunteerId] = useState<string>("");
   const [showConfirm, setShowConfirm] = useState(false);
+  
+  // Reset state when modal closes or assignment completes
+  useEffect(() => {
+    if (!isAssigning) {
+      setSelectedVolunteerId("");
+      setShowConfirm(false);
+    }
+  }, [isAssigning]);
+  
+  // Reset state when onClose is called (modal closes)
+  useEffect(() => {
+    const resetState = () => {
+      setSelectedVolunteerId("");
+      setShowConfirm(false);
+    };
+    
+    // This will be called when the modal closes
+    return () => {
+      resetState();
+    };
+  }, []);
   const selectedVolunteer = volunteers.find((v: any) => v.id === selectedVolunteerId);
   // Count current mentees for this volunteer (including this assignment if confirmed)
   const currentMenteeCount = assignments.filter((a: any) => a.volunteerId === selectedVolunteerId && a.isActive).length;
@@ -430,8 +480,10 @@ function AssignVolunteerInline({ child, volunteers, assignments, onAssign, onClo
               className="bg-green-600 hover:bg-green-700"
               disabled={isAssigning}
               onClick={async () => {
-                await onAssign(child.id, selectedVolunteerId);
-                onClose();
+                const success = await onAssign(child.id, selectedVolunteerId);
+                if (success) {
+                  onClose();
+                }
               }}
             >
               Yes, Assign

@@ -1,5 +1,8 @@
-import { createClient } from '@supabase/supabase-js';
+'use client';
+
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { supabase } from "@/lib/supabaseClient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -11,27 +14,56 @@ import Link from "next/link";
 import { formatDistanceToNow } from "date-fns";
 import { StoryDetailsDialog } from "@/components/knowledge-base/story-details-dialog";
 import { ResourceDetailsDialog } from "@/components/knowledge-base/resource-details-dialog";
+import { toast } from 'sonner';
 
-export const dynamic = "force-dynamic";
+export default function KnowledgeBasePage() {
+  const [userRole, setUserRole] = useState("VOLUNTEER");
+  const [resources, setResources] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-async function getKnowledgeResources() {
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  );
-  const { data, error } = await supabase
-    .from("knowledge_resources")
-    .select("*")
-    .order("created_at", { ascending: false });
-  if (error) throw new Error(error.message);
-  return data || [];
-}
+  useEffect(() => {
+    const fetchKnowledgeResources = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        
+        // Get the current session
+        const { data: { session } } = await supabase.auth.getSession();
+        const accessToken = session?.access_token;
+        
+        const response = await fetch('/api/knowledge-base', {
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const data = await response.json();
+        setResources(data.resources || []);
+      } catch (err: any) {
+        console.error('Error fetching knowledge resources:', err);
+        setError(err.message || 'Failed to load knowledge base');
+        toast.error('Failed to load knowledge base resources');
+      } finally {
+        setLoading(false);
+      }
+    };
 
-export default async function KnowledgeBasePage() {
-  const userRole = "VOLUNTEER";
-  const resources = await getKnowledgeResources();
-  const knowledgeBase = resources.filter((r: any) => r.type === "knowledge_base");
-  const culturalStories = resources.filter((r: any) => r.type === "cultural_story");
+    fetchKnowledgeResources();
+  }, []);
+  const knowledgeBase = resources.filter((r: any) => r.category && r.category !== "CULTURAL_WISDOM");
+  const culturalStories = resources.filter((r: any) => r.category === "CULTURAL_WISDOM");
+
+  if (loading) {
+    return <div className="p-6">Loading knowledge base...</div>;
+  }
+
+  if (error) {
+    return <div className="p-6 text-red-600">{error}</div>;
+  }
 
   const getCategoryIcon = (category: string) => {
     switch (category) {
@@ -316,7 +348,7 @@ export default async function KnowledgeBasePage() {
                     <span>{resource.createdBy?.name}</span>
                     <span className="mx-1">•</span>
                     <Calendar className="h-3 w-3 mr-1" />
-                    <span>{formatDistanceToNow(new Date(resource.created_at))} ago</span>
+                    <span>{resource.createdAt ? formatDistanceToNow(new Date(resource.createdAt)) + ' ago' : 'Recently'}</span>
                   </div>
                   <ResourceDetailsDialog resource={resource} />
                 </div>

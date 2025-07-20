@@ -32,67 +32,158 @@ export default function ChildDetailPage({ params }: PageProps) {
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     const fetchData = async () => {
-      const { data } = await supabase.auth.getSession();
-      setSession(data.session);
-      if (!data.session?.user) {
-        setError('Unauthorized');
-        return;
-      }
-      let query = supabase
-        .from('children')
-        .select('*, assignments(*, volunteer:users(id, name, specialization)), concerns(*), sessions(*, volunteer:users(id, name), summary:session_summaries(*))')
-        .eq('id', params.id)
-        .eq('isActive', true)
-        .single();
-      const user = data.session.user;
-      const userRole = user.user_metadata?.role || user.app_metadata?.role;
-      const { data: childData, error: childError } = await query;
-      if (childError || !childData) {
-        setError('Child not found or access denied');
-        return;
-      }
-      if (userRole === 'VOLUNTEER') {
-        const assigned = (childData.assignments || []).some((a: any) => a.volunteerId === user.id && a.isActive);
-        if (!assigned) {
+      try {
+        const { data } = await supabase.auth.getSession();
+        setSession(data.session);
+        if (!data.session?.user) {
           setError('Unauthorized');
           return;
         }
+        
+        const accessToken = data.session.access_token;
+        
+        // Fetch child data from API endpoint
+        const response = await fetch(`/api/children/${params.id}`, {
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (!response.ok) {
+          if (response.status === 404) {
+            setError('Child not found');
+          } else if (response.status === 401) {
+            setError('Unauthorized');
+          } else {
+            setError('Failed to load child data');
+          }
+          return;
+        }
+        
+        const responseData = await response.json();
+        const childData = responseData.child;
+        
+        if (!childData) {
+          setError('Child not found');
+          return;
+        }
+        
+        // Check volunteer permissions
+        const user = data.session.user;
+        const userRole = user.user_metadata?.role || user.app_metadata?.role;
+        if (userRole === 'VOLUNTEER') {
+          const assigned = (childData.assignments || []).some((a: any) => a.volunteerId === user.id && a.isActive);
+          if (!assigned) {
+            setError('Unauthorized');
+            return;
+          }
+        }
+        
+        // Sort sessions by date
+        let sortedSessions = (childData.sessions || []).sort((a: any, b: any) => {
+          const aTime = new Date(a.endedAt || a.startedAt).getTime();
+          const bTime = new Date(b.endedAt || b.startedAt).getTime();
+          return bTime - aTime;
+        });
+        
+        // Fetch session summaries for each session
+        for (const session of sortedSessions) {
+          try {
+            const summaryResponse = await fetch(`/api/sessions/summary?sessionId=${session.id}`, {
+              headers: {
+                'Authorization': `Bearer ${accessToken}`,
+                'Content-Type': 'application/json'
+              }
+            });
+            
+            if (summaryResponse.ok) {
+              const summaryData = await summaryResponse.json();
+              session.summary = summaryData.summary;
+            } else if (summaryResponse.status === 404) {
+              // Session doesn't have a summary yet (e.g., IN_PROGRESS sessions)
+              session.summary = null;
+            } else {
+              console.error('Error fetching session summary:', summaryResponse.status, summaryResponse.statusText);
+              session.summary = null;
+            }
+          } catch (error) {
+            console.error('Error fetching session summary:', error);
+            session.summary = null;
+          }
+        }
+        
+        childData.sessions = sortedSessions;
+        
+        setChild(childData);
+      } catch (error) {
+        console.error('Error fetching child data:', error);
+        setError('Failed to load child data');
       }
-      let sortedSessions = (childData.sessions || []).sort((a: any, b: any) => {
-        const aTime = new Date(a.endedAt || a.startedAt).getTime();
-        const bTime = new Date(b.endedAt || b.startedAt).getTime();
-        return bTime - aTime;
-      });
-      childData.sessions = sortedSessions;
-      setChild(childData);
     };
     fetchData();
   }, [params.id]);
 
   const refetchChildData = async () => {
-    const { data } = await supabase.auth.getSession();
-    if (!data.session?.user) return;
-    let query = supabase
-      .from('children')
-      .select('*, assignments(*, volunteer:users(id, name, specialization)), concerns(*), sessions(*, volunteer:users(id, name), summary:session_summaries(*))')
-      .eq('id', params.id)
-      .eq('isActive', true)
-      .single();
-    const user = data.session.user;
-    const userRole = user.user_metadata?.role || user.app_metadata?.role;
-    const { data: childData, error: childError } = await query;
-    if (childError || !childData) return;
-    if (userRole === 'VOLUNTEER') {
-      const assigned = (childData.assignments || []).some((a: any) => a.volunteerId === user.id && a.isActive);
-      if (!assigned) return;
+    try {
+      const { data } = await supabase.auth.getSession();
+      if (!data.session?.user) return;
+      
+      const accessToken = data.session.access_token;
+      
+      const response = await fetch(`/api/children/${params.id}`, {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (!response.ok) return;
+      
+      const responseData = await response.json();
+      const childData = responseData.child;
+      
+      if (!childData) return;
+      
+      // Sort sessions by date
+      let sortedSessions = (childData.sessions || []).sort((a: any, b: any) => {
+        const aTime = new Date(a.endedAt || a.startedAt).getTime();
+        const bTime = new Date(b.endedAt || b.startedAt).getTime();
+        return bTime - aTime;
+      });
+      
+      // Fetch session summaries for each session
+      for (const session of sortedSessions) {
+        try {
+          const summaryResponse = await fetch(`/api/sessions/summary?sessionId=${session.id}`, {
+            headers: {
+              'Authorization': `Bearer ${accessToken}`,
+              'Content-Type': 'application/json'
+            }
+          });
+          
+          if (summaryResponse.ok) {
+            const summaryData = await summaryResponse.json();
+            session.summary = summaryData.summary;
+          } else if (summaryResponse.status === 404) {
+            // Session doesn't have a summary yet (e.g., IN_PROGRESS sessions)
+            session.summary = null;
+          } else {
+            console.error('Error fetching session summary:', summaryResponse.status, summaryResponse.statusText);
+            session.summary = null;
+          }
+        } catch (error) {
+          console.error('Error fetching session summary:', error);
+          session.summary = null;
+        }
+      }
+      
+      childData.sessions = sortedSessions;
+      
+      setChild(childData);
+    } catch (error) {
+      console.error('Error refetching child data:', error);
     }
-    let sortedSessions = (childData.sessions || []).sort((a: any, b: any) => {
-      const aTime = new Date(a.endedAt || a.startedAt).getTime();
-      const bTime = new Date(b.endedAt || b.startedAt).getTime();
-      return bTime - aTime;
-    });
-    childData.sessions = sortedSessions;
-    setChild(childData);
   };
 
   if (error) {
@@ -133,9 +224,9 @@ export default function ChildDetailPage({ params }: PageProps) {
             <User className="h-8 w-8 text-orange-600" />
           </div>
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">{child.name}</h1>
+            <h1 className="text-3xl font-bold text-gray-900">{child.fullName}</h1>
             <div className="flex items-center gap-4 text-gray-600 mt-1">
-              <span>{child.age} years old</span>
+              <span>{child.dateOfBirth ? Math.floor((new Date().getTime() - new Date(child.dateOfBirth).getTime()) / (1000 * 60 * 60 * 24 * 365.25)) : 'Unknown'} years old</span>
               <span>•</span>
               <span className="capitalize">{child.gender.toLowerCase()}</span>
               <span>•</span>
@@ -159,18 +250,12 @@ export default function ChildDetailPage({ params }: PageProps) {
         </div>
 
         <div className="flex items-center space-x-3">
-          {activeConcerns.length > 0 && (
-            <Link href={`/session/${child.id}`}>
-              <Button className="bg-orange-600 hover:bg-orange-700">
-                <MessageCircle className="h-4 w-4 mr-2" />
-                Start Session
-              </Button>
-            </Link>
-          )}
-          <Button variant="outline">
-            <Heart className="h-4 w-4 mr-2" />
-            Add to Favorites
-          </Button>
+          <Link href={`/session/${child.id}`}>
+            <Button className="bg-orange-600 hover:bg-orange-700">
+              <MessageCircle className="h-4 w-4 mr-2" />
+              Start Session
+            </Button>
+          </Link>
         </div>
       </div>
 

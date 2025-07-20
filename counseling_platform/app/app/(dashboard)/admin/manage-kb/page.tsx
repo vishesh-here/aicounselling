@@ -1,32 +1,70 @@
-import { redirect } from "next/navigation";
+"use client";
+
+import { useState, useEffect } from "react";
 import { createClient } from '@supabase/supabase-js';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { 
-  BookOpen, Plus, Edit, Trash2, Upload, 
+  BookOpen, Plus, Upload, 
   FileText, Heart, Settings, Users 
 } from "lucide-react";
 import { AddResourceDialog } from "@/components/admin/add-resource-dialog";
+import { ResourceActions } from "@/components/admin/resource-actions";
+import { ManageKBActions } from "@/components/admin/manage-kb-actions";
 import { formatDistanceToNow } from "date-fns";
 
-export const dynamic = "force-dynamic";
+export default function ManageKnowledgeBasePage() {
+  const [resources, setResources] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
-async function getKnowledgeResources() {
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  );
-  const { data, error } = await supabase
-    .from("knowledge_resources")
-    .select("*")
-    .order("created_at", { ascending: false });
-  if (error) throw new Error(error.message);
-  return data || [];
-}
+  const fetchResources = async () => {
+    try {
+      // Get access token
+      let accessToken = null;
+      try {
+        const projectRef = Object.keys(localStorage).find(key => key.startsWith('sb-') && key.endsWith('-auth-token'));
+        if (projectRef) {
+          accessToken = JSON.parse(localStorage.getItem(projectRef) || '{}').access_token;
+        }
+      } catch (err) {}
 
-export default async function ManageKnowledgeBasePage() {
-  const resources = await getKnowledgeResources();
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (accessToken) {
+        headers["Authorization"] = `Bearer ${accessToken}`;
+      }
+
+      const response = await fetch('/api/admin/knowledge-resource', {
+        headers,
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setResources(data);
+      } else {
+        console.error('Failed to fetch resources');
+      }
+    } catch (error) {
+      console.error('Error fetching resources:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchResources();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="p-6">
+        <div className="flex items-center justify-center h-64">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+          <span className="ml-2">Loading resources...</span>
+        </div>
+      </div>
+    );
+  }
   const knowledgeBase = resources.filter((r: any) => r.type === "knowledge_base");
   const culturalStories = resources.filter((r: any) => r.type === "cultural_story");
 
@@ -64,10 +102,7 @@ export default async function ManageKnowledgeBasePage() {
         </div>
         <div className="flex items-center space-x-3">
           <AddResourceDialog />
-          <Button variant="outline">
-            <Upload className="h-4 w-4 mr-2" />
-            Bulk Upload
-          </Button>
+          <ManageKBActions onImportComplete={fetchResources} />
         </div>
       </div>
 
@@ -157,9 +192,9 @@ export default async function ManageKnowledgeBasePage() {
                     <p className="text-sm text-gray-600 mb-2 line-clamp-2">{story.summary}</p>
                     
                     <div className="flex items-center gap-4 text-xs text-gray-500">
-                      <span>Created by: {story.created_by}</span>
+                      <span>Created by: {story.createdById}</span>
                       <span>•</span>
-                      <span>{formatDistanceToNow(new Date(story.created_at))} ago</span>
+                      <span>{formatDistanceToNow(new Date(story.createdAt))} ago</span>
                       <span>•</span>
                       <span>{story.themes?.length || 0} themes</span>
                     </div>
@@ -180,14 +215,10 @@ export default async function ManageKnowledgeBasePage() {
                     )}
                   </div>
                   
-                  <div className="flex items-center space-x-2 ml-4">
-                    <Button size="sm" variant="outline">
-                      <Edit className="h-3 w-3" />
-                    </Button>
-                    <Button size="sm" variant="outline" className="text-red-600 hover:text-red-700">
-                      <Trash2 className="h-3 w-3" />
-                    </Button>
-                  </div>
+                  <ResourceActions 
+                    resourceId={story.id} 
+                    resourceType="cultural_story"
+                  />
                 </div>
               </div>
             ))}
@@ -220,13 +251,13 @@ export default async function ManageKnowledgeBasePage() {
                       <Badge className={`text-xs ${getCategoryColor(resource.category)}`}>
                         {resource.category.replace('_', ' ')}
                       </Badge>
-                      {resource.sub_category && (
+                      {resource.subCategory && (
                         <Badge variant="outline" className="text-xs">
-                          {resource.sub_category}
+                          {resource.subCategory}
                         </Badge>
                       )}
-                      <Badge variant={resource.is_active ? "default" : "secondary"} className="text-xs">
-                        {resource.is_active ? "Active" : "Inactive"}
+                      <Badge variant={resource.isActive ? "default" : "secondary"} className="text-xs">
+                        {resource.isActive ? "Active" : "Inactive"}
                       </Badge>
                     </div>
                     
@@ -235,33 +266,28 @@ export default async function ManageKnowledgeBasePage() {
                     </p>
                     
                     <div className="flex items-center gap-4 text-xs text-gray-500">
-                      <span>Created by: {resource.created_by}</span>
+                      <span>Created by: {resource.createdById}</span>
                       <span>•</span>
-                      <span>{formatDistanceToNow(new Date(resource.created_at))} ago</span>
+                      <span>{formatDistanceToNow(new Date(resource.createdAt))} ago</span>
                       <span>•</span>
                       <span>{resource.tags?.length || 0} tags</span>
-                      {resource.file_type && (
+                      {resource.fileType && (
                         <>
                           <span>•</span>
-                          <span className="uppercase">{resource.file_type}</span>
+                          <span className="uppercase">{resource.fileType}</span>
                         </>
                       )}
                     </div>
 
                     {resource.tags?.length > 0 && (
                       <div className="flex flex-wrap gap-1 mt-2">
-                        {resource.tags.slice(0, 4).map((tag: any) => (
+                        {resource.tags.slice(0, 4).map((tag: string, index: number) => (
                           <Badge 
-                            key={tag.id} 
+                            key={index} 
                             variant="outline" 
                             className="text-xs"
-                            style={{
-                              backgroundColor: tag.color ? `${tag.color}15` : undefined,
-                              borderColor: tag.color || undefined,
-                              color: tag.color || undefined
-                            }}
                           >
-                            {tag.name}
+                            {tag}
                           </Badge>
                         ))}
                         {resource.tags.length > 4 && (
@@ -273,14 +299,10 @@ export default async function ManageKnowledgeBasePage() {
                     )}
                   </div>
                   
-                  <div className="flex items-center space-x-2 ml-4">
-                    <Button size="sm" variant="outline">
-                      <Edit className="h-3 w-3" />
-                    </Button>
-                    <Button size="sm" variant="outline" className="text-red-600 hover:text-red-700">
-                      <Trash2 className="h-3 w-3" />
-                    </Button>
-                  </div>
+                  <ResourceActions 
+                    resourceId={resource.id} 
+                    resourceType="knowledge_base"
+                  />
                 </div>
               </div>
             ))}

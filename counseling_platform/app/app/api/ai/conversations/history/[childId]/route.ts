@@ -30,7 +30,7 @@ export async function GET(
     console.log('Access token (history):', accessToken);
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
     // Authenticate user using the access token
     let user = null;
@@ -50,44 +50,46 @@ export async function GET(
     const { childId } = params;
     console.log('API received childId:', childId);
 
-    // Get all conversations for this child with message counts
+    // Get all conversations for this child with message counts (optimized - no message content)
     const { data: conversations, error: convErr } = await supabase
       .from('ai_chat_conversations')
-      .select('*, messages:ai_chat_messages(*), session:sessions(id, startedAt, status)')
+      .select(`
+        *,
+        messageCount:ai_chat_messages(count),
+        lastMessage:ai_chat_messages(timestamp, role, content),
+        session:sessions(id, startedAt, status)
+      `)
       .eq('child_id', childId)
       .eq('isActive', true)
       .order('createdAt', { ascending: false });
 
+    console.log('Raw conversations data:', conversations);
+    console.log('Conversation error:', convErr);
+
     console.log('Conversations found:', conversations?.length);
+    console.log('Optimized query - no message content fetched for sidebar');
 
     if (convErr) {
       console.error('Supabase conversation fetch error:', convErr);
       return NextResponse.json({ success: false, error: 'Failed to fetch conversations' }, { status: 500 });
     }
 
-    // Format the conversations for the frontend
+    // Format the conversations for the frontend (optimized)
     const formattedConversations = (conversations || []).map(conv => ({
       id: conv.id,
       sessionId: conv.sessionId,
       conversationName: conv.conversationName || `Conversation ${conv.id.slice(-6)}`,
       createdAt: conv.createdAt,
       isActive: conv.isActive,
-      messageCount: conv.messages.length,
-      lastMessageAt: conv.messages.length > 0 
-        ? conv.messages[conv.messages.length - 1].timestamp 
+      messageCount: conv.messageCount?.[0]?.count || 0,
+      lastMessageAt: conv.lastMessage && conv.lastMessage.length > 0 
+        ? conv.lastMessage[conv.lastMessage.length - 1].timestamp 
         : conv.createdAt,
       sessionInfo: conv.session ? {
         id: conv.session.id,
         startedAt: conv.session.startedAt,
         status: conv.session.status
-      } : null,
-      messages: conv.messages.map((msg: any) => ({
-        id: msg.id,
-        role: msg.role,
-        content: msg.content,
-        timestamp: msg.timestamp,
-        metadata: msg.metadata
-      }))
+      } : null
     }));
 
     return NextResponse.json({

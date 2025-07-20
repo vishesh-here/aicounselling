@@ -68,9 +68,9 @@ function SessionHistory({ sessions }) {
           <card_1.CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600">Resolved Issues</p>
+                <p className="text-sm text-gray-600">Sessions with Summaries</p>
                 <p className="text-2xl font-bold text-gray-900">
-                  {sessions.filter(s => { var _a; return ((_a = s.summary) === null || _a === void 0 ? void 0 : _a.resolutionStatus) === "RESOLVED"; }).length}
+                  {sessions.filter(s => s.summary).length}
                 </p>
               </div>
               <lucide_react_1.TrendingUp className="h-8 w-8 text-green-600"/>
@@ -82,9 +82,9 @@ function SessionHistory({ sessions }) {
           <card_1.CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600">In Progress</p>
+                <p className="text-sm text-gray-600">Effective Sessions</p>
                 <p className="text-2xl font-bold text-gray-900">
-                  {sessions.filter(s => { var _a; return ((_a = s.summary) === null || _a === void 0 ? void 0 : _a.resolutionStatus) === "IN_PROGRESS"; }).length}
+                  {sessions.filter(s => { var _a; return ((_a = s.summary) === null || _a === void 0 ? void 0 : _a.effectiveness) === "Effective"; }).length}
                 </p>
               </div>
               <lucide_react_1.Clock className="h-8 w-8 text-orange-600"/>
@@ -96,9 +96,9 @@ function SessionHistory({ sessions }) {
           <card_1.CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600">Follow-ups Needed</p>
+                <p className="text-sm text-gray-600">Sessions with Follow-ups</p>
                 <p className="text-2xl font-bold text-gray-900">
-                  {sessions.filter(s => { var _a; return (_a = s.summary) === null || _a === void 0 ? void 0 : _a.followUpNeeded; }).length}
+                  {sessions.filter(s => { var _a; return (_a = s.summary) === null || _a === void 0 ? void 0 : _a.followup_notes; }).length}
                 </p>
               </div>
               <lucide_react_1.MessageCircle className="h-8 w-8 text-purple-600"/>
@@ -143,18 +143,23 @@ function SessionHistory({ sessions }) {
                             </badge_1.Badge>
                           </div>
                           <div className="flex items-center space-x-2">
-                            <badge_1.Badge className={`text-xs ${getStatusColor(((_a = session.summary) === null || _a === void 0 ? void 0 : _a.resolutionStatus) || "PENDING")}`}>
-                              {((_b = session.summary) === null || _b === void 0 ? void 0 : _b.resolutionStatus) || "Pending"}
+                            <badge_1.Badge className={`text-xs ${session.summary ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-800"}`}>
+                              {session.summary ? "Completed" : "No Summary"}
                             </badge_1.Badge>
+                            {session.summary && session.summary.effectiveness && (
+                              <badge_1.Badge className={`text-xs ${session.summary.effectiveness === "Effective" ? "bg-blue-100 text-blue-800" : "bg-yellow-100 text-yellow-800"}`}>
+                                {session.summary.effectiveness}
+                              </badge_1.Badge>
+                            )}
                           </div>
                         </div>
 
                         <div className="space-y-2">
                           <div className="flex items-center text-sm text-gray-600">
                             <lucide_react_1.Calendar className="h-4 w-4 mr-2"/>
-                            <span>{(0, date_fns_1.format)(new Date(session.createdAt), "PPP")}</span>
+                            <span>{(0, date_fns_1.format)(new Date(session.startedAt || session.createdAt), "PPP 'at' p")}</span>
                             <span className="mx-2">•</span>
-                            <span>{(0, date_fns_1.formatDistanceToNow)(new Date(session.createdAt))} ago</span>
+                            <span>{(0, date_fns_1.formatDistanceToNow)(new Date(session.startedAt || session.createdAt))} ago</span>
                           </div>
 
                           <div className="flex items-center text-sm text-gray-600">
@@ -166,48 +171,38 @@ function SessionHistory({ sessions }) {
                               <p className="text-sm text-gray-700">{session.summary.summary}</p>
                             </div>)}
 
-                          {/* Concerns Discussed */}
-                          {((_f = (_e = session.summary) === null || _e === void 0 ? void 0 : _e.concernsDiscussed) === null || _f === void 0 ? void 0 : _f.length) > 0 && (<div className="mt-3">
-                              <h5 className="text-xs font-medium text-gray-900 mb-1">Concerns Discussed:</h5>
+                          {/* Follow-up Notes */}
+                          {((_e = session.summary) === null || _e === void 0 ? void 0 : _e.followup_notes) && (<div className="mt-3">
+                              <h5 className="text-xs font-medium text-gray-900 mb-1">Follow-up Notes:</h5>
+                              <p className="text-xs text-gray-700">{session.summary.followup_notes}</p>
+                            </div>)}
+
+                          {/* New Concerns */}
+                          {((_f = (_e = session.summary) === null || _e === void 0 ? void 0 : _e.new_concerns) === null || _f === void 0 ? void 0 : _f.length) > 0 && (<div className="mt-3">
+                              <h5 className="text-xs font-medium text-gray-900 mb-1">New Concerns:</h5>
                               <div className="flex flex-wrap gap-1">
-                                {session.summary.concernsDiscussed.map((concern, i) => (<badge_1.Badge key={i} variant="outline" className="text-xs">
+                                {session.summary.new_concerns.map((concern, i) => (<badge_1.Badge key={i} variant="outline" className="text-xs">
+                                    {typeof concern === 'object' ? concern.title : concern}
+                                  </badge_1.Badge>))}
+                              </div>
+                            </div>)}
+
+                          {/* Resolved Concerns */}
+                          {((_g = session.summary) === null || _g === void 0 ? void 0 : _g.resolved_concerns) && session.summary.resolved_concerns.length > 0 && (<div className="mt-3">
+                              <h5 className="text-xs font-medium text-gray-900 mb-1">Resolved Concerns:</h5>
+                              <div className="flex flex-wrap gap-1">
+                                {session.summary.resolved_concerns.map((concern, i) => (<badge_1.Badge key={i} variant="secondary" className="text-xs bg-green-100 text-green-800">
                                     {concern}
                                   </badge_1.Badge>))}
                               </div>
                             </div>)}
 
-                          {/* Cultural Stories Used */}
-                          {((_h = (_g = session.summary) === null || _g === void 0 ? void 0 : _g.culturalStoriesUsed) === null || _h === void 0 ? void 0 : _h.length) > 0 && (<div className="mt-3">
-                              <h5 className="text-xs font-medium text-gray-900 mb-1 flex items-center gap-1">
-                                <lucide_react_1.BookOpen className="h-3 w-3"/>
-                                Cultural Stories Used:
-                              </h5>
-                              <div className="flex flex-wrap gap-1">
-                                {session.summary.culturalStoriesUsed.map((story, i) => (<badge_1.Badge key={i} variant="secondary" className="text-xs bg-blue-100 text-blue-800">
-                                    {story}
-                                  </badge_1.Badge>))}
-                              </div>
-                            </div>)}
-
-                          {/* Next Steps */}
-                          {((_k = (_j = session.summary) === null || _j === void 0 ? void 0 : _j.nextSteps) === null || _k === void 0 ? void 0 : _k.length) > 0 && (<div className="mt-3">
-                              <h5 className="text-xs font-medium text-gray-900 mb-1">Next Steps:</h5>
-                              <ul className="text-xs text-gray-700 space-y-1">
-                                {session.summary.nextSteps.map((step, i) => (<li key={i} className="flex items-start gap-1">
-                                    <span className="text-orange-600">•</span>
-                                    <span>{step}</span>
-                                  </li>))}
-                              </ul>
-                            </div>)}
-
-                          {/* Follow-up Info */}
-                          {((_l = session.summary) === null || _l === void 0 ? void 0 : _l.followUpNeeded) && (<div className="mt-3 p-2 bg-yellow-50 border border-yellow-200 rounded-lg">
-                              <div className="flex items-center gap-1 text-xs text-yellow-800">
-                                <lucide_react_1.Clock className="h-3 w-3"/>
-                                <span className="font-medium">Follow-up needed</span>
-                                {session.summary.followUpDate && (<span>
-                                    by {(0, date_fns_1.format)(new Date(session.summary.followUpDate), "PP")}
-                                  </span>)}
+                          {/* Next Session Date */}
+                          {((_h = session.summary) === null || _h === void 0 ? void 0 : _h.next_session_date) && (<div className="mt-3 p-2 bg-blue-50 border border-blue-200 rounded-lg">
+                              <div className="flex items-center gap-1 text-xs text-blue-800">
+                                <lucide_react_1.Calendar className="h-3 w-3"/>
+                                <span className="font-medium">Next session scheduled for:</span>
+                                <span>{(0, date_fns_1.format)(new Date(session.summary.next_session_date), "PP")}</span>
                               </div>
                             </div>)}
 

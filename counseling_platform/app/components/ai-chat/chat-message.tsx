@@ -4,9 +4,10 @@
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { Bot, User, Clock } from "lucide-react";
+import { Bot, User, Clock, MoreVertical } from "lucide-react";
 import { format } from "date-fns";
 import ReactMarkdown from 'react-markdown';
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
 
 interface ChatMessageProps {
   role: "USER" | "ASSISTANT" | "SYSTEM";
@@ -16,9 +17,12 @@ interface ChatMessageProps {
     responseTime?: number;
     contextSources?: string[];
   };
+  isAdmin?: boolean;
+  ragContext?: any[];
+  onShowRagModal?: () => void;
 }
 
-export function ChatMessage({ role, content, timestamp, metadata }: ChatMessageProps) {
+export function ChatMessage({ role, content, timestamp, metadata, isAdmin, ragContext, onShowRagModal }: ChatMessageProps) {
   const isUser = role === "USER";
   const isSystem = role === "SYSTEM";
 
@@ -66,6 +70,24 @@ export function ChatMessage({ role, content, timestamp, metadata }: ChatMessageP
             )}
           </div>
         </div>
+
+        {/* Kebab menu for admin debug (only for latest AI message) */}
+        {isAdmin && ragContext && onShowRagModal && (
+          <div className="flex justify-end mt-1">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button className="p-1 rounded hover:bg-gray-100 focus:outline-none">
+                  <MoreVertical className="h-4 w-4 text-gray-400" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={onShowRagModal}>
+                  Show RAG Chunks
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        )}
 
         {/* Metadata */}
         <div className={cn(

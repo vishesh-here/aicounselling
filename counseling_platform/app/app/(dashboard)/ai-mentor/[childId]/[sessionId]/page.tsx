@@ -29,6 +29,8 @@ import {
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { createClient } from '@supabase/supabase-js';
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
+import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -51,7 +53,13 @@ interface ConversationHistory {
   sessionId?: string;
   conversationName?: string;
   createdAt: Date;
-  messages: ChatMessageType[];
+  messageCount: number;
+  lastMessageAt: Date;
+  sessionInfo?: {
+    id: string;
+    startedAt: Date;
+    status: string;
+  } | null;
   isActive: boolean;
 }
 
@@ -74,6 +82,9 @@ export default function AiMentorPage() {
   const [showHistory, setShowHistory] = useState(true);
   const [expandedConversations, setExpandedConversations] = useState<Set<string>>(new Set());
   const [showSuggestions, setShowSuggestions] = useState(true);
+  const [latestRagContext, setLatestRagContext] = useState<any>(null); // Store full context object
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [showRagModal, setShowRagModal] = useState(false);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
@@ -92,6 +103,26 @@ export default function AiMentorPage() {
   useEffect(() => {
     console.log('Rendering currentMessages:', currentMessages);
   }, [currentMessages]);
+
+  // Check if user is admin
+  useEffect(() => {
+    const checkAdminStatus = async () => {
+      try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        const user = sessionData?.session?.user;
+        if (user) {
+          // Check role from user_metadata (same pattern used in other API routes)
+          const role = user.user_metadata?.role;
+          console.log('User role:', role);
+          setIsAdmin(role === 'ADMIN');
+        }
+      } catch (error) {
+        console.error('Error checking admin status:', error);
+        setIsAdmin(false);
+      }
+    };
+    checkAdminStatus();
+  }, []);
 
   // Load child data and conversation history
   useEffect(() => {
@@ -294,6 +325,13 @@ export default function AiMentorPage() {
         loadConversationHistory();
       }
 
+      // Store latest RAG context if present
+      if (data.ragContext) {
+        setLatestRagContext(data.ragContext);
+      } else {
+        setLatestRagContext(null);
+      }
+
     } catch (error) {
       console.error('[sendMessage] Error:', error);
       toast.error("Failed to get AI response. Please try again.");
@@ -463,7 +501,7 @@ export default function AiMentorPage() {
                         {new Date(conversation.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </div>
                       <Badge variant="secondary" className="text-xs mt-1">
-                        {conversation.messages.length} messages
+                        {conversation.messageCount || 0} messages
                       </Badge>
                     </div>
                     
@@ -493,25 +531,9 @@ export default function AiMentorPage() {
 
                   {expandedConversations.has(conversation.id) && (
                     <div className="mt-2 pt-2 border-t border-gray-100">
-                      <div className="space-y-1 max-h-32 overflow-y-auto">
-                        {conversation.messages.slice(0, 3).map((message, idx) => (
-                          <div key={idx} className="text-xs">
-                            <span className={cn(
-                              "font-medium",
-                              message.role === "USER" ? "text-blue-600" : "text-purple-600"
-                            )}>
-                              {message.role === "USER" ? "You" : "AI"}:
-                            </span>
-                            <span className="text-gray-600 ml-1">
-                              {message.content.slice(0, 50)}...
-                            </span>
-                          </div>
-                        ))}
-                        {conversation.messages.length > 3 && (
-                          <p className="text-xs text-gray-400">
-                            +{conversation.messages.length - 3} more messages
-                          </p>
-                        )}
+                      <div className="text-xs text-gray-500">
+                        <p>Click to view full conversation</p>
+                        <p>Last message: {new Date(conversation.lastMessageAt).toLocaleString()}</p>
                       </div>
                     </div>
                   )}
@@ -612,15 +634,23 @@ export default function AiMentorPage() {
           {/* Messages */}
           <ScrollArea className="flex-1 p-4" ref={scrollAreaRef}>
             <div className="max-w-4xl mx-auto space-y-4">
-              {currentMessages.map((message) => (
-                <ChatMessage
-                  key={message.id}
-                  role={message.role}
-                  content={message.content}
-                  timestamp={message.timestamp}
-                  metadata={message.metadata}
-                />
-              ))}
+              {currentMessages.map((message, idx) => {
+                const isLatestAI =
+                  message.role === "ASSISTANT" &&
+                  idx === currentMessages.length - 1;
+                return (
+                  <ChatMessage
+                    key={message.id}
+                    role={message.role}
+                    content={message.content}
+                    timestamp={message.timestamp}
+                    metadata={message.metadata}
+                    isAdmin={isAdmin && isLatestAI}
+                    ragContext={isLatestAI && latestRagContext ? latestRagContext : undefined}
+                    onShowRagModal={isLatestAI ? () => setShowRagModal(true) : undefined}
+                  />
+                );
+              })}
               
               {isLoading && (
                 <div className="max-w-4xl mx-auto">
@@ -631,6 +661,65 @@ export default function AiMentorPage() {
               <div ref={messagesEndRef} />
             </div>
           </ScrollArea>
+          {/* RAG Debug Modal */}
+          {showRagModal && latestRagContext && (
+            <Dialog open={showRagModal} onOpenChange={setShowRagModal}>
+              <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
+                <DialogHeader>
+                  <DialogTitle>RAG Context Used</DialogTitle>
+                </DialogHeader>
+                <ScrollArea className="flex-1 pr-4">
+                  <div className="space-y-4 pb-4">
+                    {/* Knowledge Chunks */}
+                    <div>
+                      <h3 className="font-semibold mb-2">Knowledge Chunks</h3>
+                      <div className="bg-gray-50 rounded border">
+                        <table className="min-w-full text-xs">
+                          <thead className="bg-gray-100">
+                            <tr>
+                              <th className="px-2 py-1 text-left">Similarity</th>
+                              <th className="px-2 py-1 text-left">Content</th>
+                              <th className="px-2 py-1 text-left">Chunk ID</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {latestRagContext.knowledgeChunks?.sort((a: any, b: any) => (b.similarity ?? 0) - (a.similarity ?? 0)).map((chunk: any, i: number) => (
+                              <tr key={chunk.id || i} className="border-b border-gray-200">
+                                <td className="px-2 py-1">{chunk.similarity?.toFixed(3) ?? "-"}</td>
+                                <td className="px-2 py-1 max-w-xs truncate" title={chunk.content}>{chunk.content?.slice(0, 100) ?? "-"}</td>
+                                <td className="px-2 py-1">{chunk.id}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                    {/* Child Profile */}
+                    <div>
+                      <h3 className="font-semibold mb-2">Child Profile</h3>
+                      <div className="bg-gray-100 p-2 rounded text-xs overflow-x-auto max-h-32">
+                        <pre className="whitespace-pre-wrap">{JSON.stringify(latestRagContext.childProfile, null, 2)}</pre>
+                      </div>
+                    </div>
+                    {/* Active Concerns */}
+                    <div>
+                      <h3 className="font-semibold mb-2">Active Concerns</h3>
+                      <div className="bg-gray-100 p-2 rounded text-xs overflow-x-auto max-h-32">
+                        <pre className="whitespace-pre-wrap">{JSON.stringify(latestRagContext.activeConcerns, null, 2)}</pre>
+                      </div>
+                    </div>
+                    {/* Session Summaries */}
+                    <div>
+                      <h3 className="font-semibold mb-2">Session Summaries</h3>
+                      <div className="bg-gray-100 p-2 rounded text-xs overflow-x-auto max-h-40">
+                        <pre className="whitespace-pre-wrap">{JSON.stringify(latestRagContext.sessionSummaries, null, 2)}</pre>
+                      </div>
+                    </div>
+                  </div>
+                </ScrollArea>
+              </DialogContent>
+            </Dialog>
+          )}
 
           {/* Chat Input */}
           <div className="bg-white border-t border-gray-200 p-4">

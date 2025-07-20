@@ -1,0 +1,97 @@
+BULK IMPORT TEMPLATE
+====================
+
+Copy and paste your content in this format, separating each resource with "---" on its own line:
+
+Story of Rama and Sita
+A tale of devotion and loyalty from the Ramayana, teaching the importance of commitment and dharma in relationships
+**Type:** cultural_story
+**Category:** CULTURAL_WISDOM
+**Source:** RAMAYANA
+**Themes:** devotion, loyalty, dharma, relationships
+**Tags:** rama, sita, ramayana, devotion
+**ApplicableFor:** relationship counseling, moral guidance, commitment issues
+
+Once upon a time, there was a prince named Rama, the embodiment of dharma and righteousness. He was married to Sita, a princess of unparalleled beauty and virtue. Their love story is one of the greatest examples of devotion and loyalty in Indian mythology.
+
+When Rama was exiled to the forest for fourteen years, Sita chose to accompany him despite the hardships. She said, "Where you go, I go. Your path is my path." This demonstrates the depth of their commitment and the strength of their bond.
+
+The story teaches us that true love is not just about passion, but about standing by each other through all of life's challenges. It shows how commitment, loyalty, and mutual respect form the foundation of lasting relationships.
+
+---
+
+The Wise Monkey and the Crocodile
+A Panchatantra story about trust, friendship, and wisdom in dealing with difficult situations
+**Type:** cultural_story
+**Category:** CULTURAL_WISDOM
+**Source:** PANCHTANTRA
+**Themes:** wisdom, trust, friendship, problem-solving
+**Tags:** panchatantra, monkey, crocodile, wisdom
+**ApplicableFor:** trust issues, friendship counseling, problem-solving skills
+
+A clever monkey lived on a tree by a river. A crocodile lived in the river and they became friends. The monkey would share fruits with the crocodile, who would take some home for his wife.
+
+One day, the crocodile's wife wanted to eat the monkey's heart, thinking it would make her immortal. The crocodile, torn between friendship and his wife's demand, decided to trick the monkey.
+
+He invited the monkey to his home for dinner. The monkey, being wise, sensed something was wrong. When the crocodile revealed the truth, the monkey cleverly said his heart was left on the tree and they should go back to get it.
+
+This story teaches us about the importance of wisdom in difficult situations, the value of true friendship, and how to handle betrayal with intelligence rather than anger.
+
+---
+
+Career Development Framework
+A comprehensive guide for career planning and professional growth
+**Type:** knowledge_base
+**Category:** CAREER_GUIDANCE
+**SubCategory:** Professional Development
+**Tags:** career, development, planning, growth
+**ApplicableFor:** career counseling, professional development, goal setting
+
+Career development is a lifelong process of managing learning, work, and transitions to move toward a personally determined and evolving preferred future.
+
+Key Components:
+1. Self-Assessment: Understanding your skills, interests, values, and personality
+2. Career Exploration: Researching different career paths and opportunities
+3. Goal Setting: Establishing short-term and long-term career objectives
+4. Skill Development: Acquiring new skills and improving existing ones
+5. Networking: Building professional relationships and connections
+6. Continuous Learning: Staying updated with industry trends and developments
+
+The framework emphasizes the importance of adaptability, continuous learning, and proactive career management in today's rapidly changing work environment.
+
+---
+
+Stress Management Techniques
+Evidence-based strategies for managing stress and maintaining mental well-being
+**Type:** knowledge_base
+**Category:** PSYCHOLOGICAL_COUNSELING
+**SubCategory:** Mental Health
+**Tags:** stress, management, mental health, well-being
+**ApplicableFor:** stress counseling, anxiety management, mental health support
+
+Stress is a natural response to challenges and demands in life. However, chronic stress can have negative effects on physical and mental health. Here are effective stress management techniques:
+
+1. Mindfulness and Meditation: Practice daily meditation or mindfulness exercises to stay present and reduce anxiety.
+
+2. Physical Exercise: Regular physical activity releases endorphins and helps reduce stress hormones.
+
+3. Time Management: Prioritize tasks, set realistic goals, and learn to say no to avoid overwhelming yourself.
+
+4. Social Support: Maintain strong relationships with family and friends for emotional support.
+
+5. Healthy Lifestyle: Ensure adequate sleep, balanced nutrition, and avoid excessive caffeine and alcohol.
+
+6. Relaxation Techniques: Practice deep breathing, progressive muscle relaxation, or yoga.
+
+Remember that seeking professional help is important if stress becomes overwhelming or affects daily functioning.
+
+---
+
+NOTES:
+- Each resource must have a title, summary, and content
+- Use "---" on its own line to separate resources
+- Metadata fields (Type, Category, etc.) are optional but recommended
+- Categories: CAREER_GUIDANCE, PSYCHOLOGICAL_COUNSELING, CULTURAL_WISDOM, EDUCATIONAL_RESOURCES, LIFE_SKILLS
+- Sources: RAMAYANA, MAHABHARATA, BHAGAVAD_GITA, PANCHTANTRA, JATAKA_TALES
+- Themes and tags should be comma-separated
+- ApplicableFor should list use cases for the resource 

@@ -1,16 +1,29 @@
 import { createClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
 import { NextRequest, NextResponse } from 'next/server';
+import { staticContextCache } from "../../ai/rag-context/route";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
-function getSupabase(req: NextRequest) {
-  const cookieStore = cookies();
-  const supabase = createClient(supabaseUrl, supabaseKey, {
-    global: { headers: { Cookie: cookieStore.toString() } },
-  });
-  return supabase;
+// Helper to get user from authorization header
+async function getUserFromAuthHeader(req: NextRequest) {
+  const authHeader = req.headers.get('authorization');
+  
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return { user: null, error: 'No authorization header' };
+  }
+  
+  const accessToken = authHeader.replace('Bearer ', '');
+  
+  // Create client with anon key
+  const client = createClient(supabaseUrl, supabaseAnonKey);
+  
+  // Get user directly using the access token
+  const { data: { user }, error } = await client.auth.getUser(accessToken);
+  
+  return { user, error };
 }
 
 // GET - Fetch a specific child by ID
@@ -22,9 +35,10 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     accessToken = authHeader.replace('Bearer ', '');
   }
 
+  // Create admin client for database operations
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
 
   // Authenticate user using the access token
@@ -39,17 +53,36 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  // Fetch the child profile
+  // Fetch the child profile with all related data
   const { id } = params;
   const { data: child, error: childError } = await supabase
     .from('children')
-    .select('*')
+    .select('*, assignments(*, volunteer:users(id, name, specialization)), concerns(*), sessions(*, volunteer:users(id, name))')
     .eq('id', id)
     .eq('isActive', true)
     .single();
 
   if (childError || !child) {
     return NextResponse.json({ error: 'Child not found' }, { status: 404 });
+  }
+
+
+
+  // Check if user has access to this child
+  const userRole = user.user_metadata?.role || user.app_metadata?.role;
+  console.log('User access check:', { userId: user.id, userEmail: user.email, userRole, childId: id });
+  
+  if (userRole === 'VOLUNTEER') {
+    const assigned = (child.assignments || []).some((a: any) => a.volunteerId === user.id && a.isActive);
+    console.log('Volunteer assignment check:', { assignments: child.assignments, assigned });
+    if (!assigned) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
+    }
+  } else if (userRole === 'ADMIN') {
+    console.log('Admin access granted');
+  } else {
+    console.log('Unknown role:', userRole);
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
   }
 
   return NextResponse.json({ child }, { status: 200 });
@@ -61,68 +94,89 @@ export async function PUT(
   { params }: { params: { id: string } }
 ) {
   try {
-    const supabase = getSupabase(request);
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    // Get user from authorization header
+    const { user, error: userError } = await getUserFromAuthHeader(request);
+    if (userError || !user) {
+      console.error('User error:', userError);
+      return NextResponse.json({ error: 'No valid session' }, { status: 401 });
     }
 
-    if (!user || user.role !== 'ADMIN') {
+    // Check if user is admin
+    const userRole = user.user_metadata?.role || user.app_metadata?.role;
+    if (userRole !== 'ADMIN') {
       return NextResponse.json({ error: 'Unauthorized. Only administrators can update child profiles.' }, { status: 401 });
     }
 
     const { id } = params;
     const body = await request.json();
     const {
-      name,
-      age,
+      fullName,
+      mothersName,
+      fathersName,
+      dateOfBirth,
       gender,
+      currentCity,
       state,
-      district,
+      educationType,
+      currentSchoolCollegeName,
+      currentClassSemester,
+      whatsappNumber,
+      callingNumber,
+      parentGuardianContactNumber,
       background,
-      schoolLevel,
       interests,
-      challenges,
+      concerns,
       language
     } = body;
 
     // Validation
     const errors: { [key: string]: string } = {};
 
-    if (!name?.trim()) {
-      errors.name = 'Child name is required';
+    if (!fullName?.trim()) {
+      errors.fullName = 'Full name is required';
     }
 
-    if (!age || age < 5 || age > 18) {
-      errors.age = 'Age must be between 5 and 18 years';
+    if (!dateOfBirth) {
+      errors.dateOfBirth = 'Date of birth is required';
+    } else {
+      const birthDate = new Date(dateOfBirth);
+      const today = new Date();
+      const age = today.getFullYear() - birthDate.getFullYear();
+      if (age < 5 || age > 18) {
+        errors.dateOfBirth = 'Child must be between 5 and 18 years old';
+      }
     }
 
     if (!gender || !['MALE', 'FEMALE', 'OTHER'].includes(gender)) {
       errors.gender = 'Please select a valid gender';
     }
 
+    if (!currentCity?.trim()) {
+      errors.currentCity = 'Current city is required';
+    }
+
     if (!state?.trim()) {
       errors.state = 'State is required';
     }
 
-    if (!district?.trim()) {
-      errors.district = 'District is required';
+    if (!educationType?.trim()) {
+      errors.educationType = 'Education type is required';
+    }
+
+    if (!currentSchoolCollegeName?.trim()) {
+      errors.currentSchoolCollegeName = 'School/College name is required';
+    }
+
+    if (!currentClassSemester?.trim()) {
+      errors.currentClassSemester = 'Current class/semester is required';
+    }
+
+    if (!parentGuardianContactNumber?.trim()) {
+      errors.parentGuardianContactNumber = 'Parent/Guardian contact number is required';
     }
 
     if (!background?.trim()) {
       errors.background = 'Background information is required';
-    }
-
-    if (!schoolLevel?.trim()) {
-      errors.schoolLevel = 'School level is required';
-    }
-
-    if (!interests || !Array.isArray(interests) || interests.length === 0) {
-      errors.interests = 'At least one interest is required';
-    }
-
-    if (!challenges || !Array.isArray(challenges) || challenges.length === 0) {
-      errors.challenges = 'At least one challenge is required';
     }
 
     if (!language?.trim()) {
@@ -133,71 +187,82 @@ export async function PUT(
       return NextResponse.json({ errors }, { status: 400 });
     }
 
-    // Check if child exists
-    const existingChild = await prisma.child.findFirst({
-      where: {
-        id: id,
-        isActive: true
-      }
-    });
+    // Create admin client for database operations
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
-    if (!existingChild) {
+    // Check if child exists
+    const { data: existingChild, error: existingError } = await supabaseAdmin
+      .from('children')
+      .select('*')
+      .eq('id', id)
+      .eq('isActive', true)
+      .single();
+
+    if (existingError || !existingChild) {
       return NextResponse.json({ error: 'Child not found' }, { status: 404 });
     }
 
-    // Check if another child with same name, age, and district already exists (excluding current child)
-    const duplicateChild = await prisma.child.findFirst({
-      where: {
-        name: name.trim(),
-        age: age,
-        district: district.trim(),
-        isActive: true,
-        id: { not: id }
-      }
-    });
+    // Check if another child with same name, date of birth, and current city already exists (excluding current child)
+    const { data: duplicateChild, error: duplicateError } = await supabaseAdmin
+      .from('children')
+      .select('*')
+      .eq('fullName', fullName.trim())
+      .eq('dateOfBirth', dateOfBirth)
+      .eq('currentCity', currentCity.trim())
+      .eq('isActive', true)
+      .neq('id', id)
+      .single();
 
     if (duplicateChild) {
       return NextResponse.json(
-        { errors: { name: 'A child with the same name, age, and district already exists' } },
+        { errors: { fullName: 'A child with the same name, date of birth, and city already exists' } },
         { status: 400 }
       );
     }
 
     // Update the child profile
-    const updatedChild = await prisma.child.update({
-      where: { id: id },
-      data: {
-        name: name.trim(),
-        age: age,
+    const { data: updatedChild, error: updateError } = await supabaseAdmin
+      .from('children')
+      .update({
+        fullName: fullName.trim(),
+        mothersName: mothersName?.trim() || null,
+        fathersName: fathersName?.trim() || null,
+        dateOfBirth: new Date(dateOfBirth).toISOString(),
         gender: gender,
+        currentCity: currentCity.trim(),
         state: state.trim(),
-        district: district.trim(),
+        educationType: educationType.trim(),
+        currentSchoolCollegeName: currentSchoolCollegeName.trim(),
+        currentClassSemester: currentClassSemester.trim(),
+        whatsappNumber: whatsappNumber?.trim() || null,
+        callingNumber: callingNumber?.trim() || null,
+        parentGuardianContactNumber: parentGuardianContactNumber.trim(),
         background: background.trim(),
-        schoolLevel: schoolLevel.trim(),
-        interests: interests.map((i: string) => i.trim()),
-        challenges: challenges.map((c: string) => c.trim()),
+        interests: Array.isArray(interests) ? interests.map((i: string) => i.trim()) : [],
+        concerns: Array.isArray(concerns) ? concerns.map((c: string) => c.trim()) : [],
         language: language.trim(),
-        updatedAt: new Date()
-      }
-    });
+        updatedAt: new Date().toISOString()
+      })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (updateError) {
+      console.error('Error updating child:', updateError);
+      return NextResponse.json({ error: 'Failed to update child profile' }, { status: 500 });
+    }
+
+    // Invalidate static RAG context cache for this child
+    staticContextCache.delete(id);
 
     return NextResponse.json({
       message: 'Child profile updated successfully',
-      child: {
-        id: updatedChild.id,
-        name: updatedChild.name,
-        age: updatedChild.age,
-        gender: updatedChild.gender,
-        state: updatedChild.state,
-        district: updatedChild.district
-      }
+      child: updatedChild
     });
 
   } catch (error) {
     console.error('Error updating child:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
-  } finally {
-    await prisma.$disconnect();
   }
 }
 
@@ -207,49 +272,63 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
-    const supabase = getSupabase(request);
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    // Get user from authorization header
+    const { user, error: userError } = await getUserFromAuthHeader(request);
+    if (userError || !user) {
+      console.error('User error:', userError);
+      return NextResponse.json({ error: 'No valid session' }, { status: 401 });
     }
 
-    if (!user || user.role !== 'ADMIN') {
+    // Check if user is admin
+    const userRole = user.user_metadata?.role || user.app_metadata?.role;
+    if (userRole !== 'ADMIN') {
       return NextResponse.json({ error: 'Unauthorized. Only administrators can delete child profiles.' }, { status: 401 });
     }
 
     const { id } = params;
 
-    // Check if child exists
-    const existingChild = await prisma.child.findFirst({
-      where: {
-        id: id,
-        isActive: true
-      }
-    });
+    // Create admin client for database operations
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
-    if (!existingChild) {
+    // Check if child exists
+    const { data: existingChild, error: existingError } = await supabaseAdmin
+      .from('children')
+      .select('*')
+      .eq('id', id)
+      .eq('isActive', true)
+      .single();
+
+    if (existingError || !existingChild) {
       return NextResponse.json({ error: 'Child not found' }, { status: 404 });
     }
 
     // Soft delete the child (set isActive to false)
-    await prisma.child.update({
-      where: { id: id },
-      data: {
+    const { error: updateError } = await supabaseAdmin
+      .from('children')
+      .update({
         isActive: false,
-        updatedAt: new Date()
-      }
-    });
+        updatedAt: new Date().toISOString()
+      })
+      .eq('id', id);
+
+    if (updateError) {
+      console.error('Error soft deleting child:', updateError);
+      return NextResponse.json({ error: 'Failed to delete child profile' }, { status: 500 });
+    }
 
     // Also deactivate any active assignments
-    await prisma.assignment.updateMany({
-      where: {
-        child_id: id,
-        isActive: true
-      },
-      data: {
+    const { error: assignmentError } = await supabaseAdmin
+      .from('assignments')
+      .update({
         isActive: false
-      }
-    });
+      })
+      .eq('child_id', id)
+      .eq('isActive', true);
+
+    if (assignmentError) {
+      console.error('Error deactivating assignments:', assignmentError);
+      // Don't fail the request if assignment deactivation fails
+    }
 
     return NextResponse.json({
       message: 'Child profile deleted successfully'
@@ -258,7 +337,5 @@ export async function DELETE(
   } catch (error) {
     console.error('Error deleting child:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
-  } finally {
-    await prisma.$disconnect();
   }
 }
