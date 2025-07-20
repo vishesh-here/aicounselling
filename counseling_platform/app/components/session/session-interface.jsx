@@ -22,6 +22,7 @@ const rich_session_summary_1 = require("./rich-session-summary");
 const lucide_react_1 = require("lucide-react");
 const sonner_1 = require("sonner");
 const navigation_1 = require("next/navigation");
+const supabaseClient_1 = require("@/lib/supabaseClient");
 function SessionInterface({ child, activeSession, userId, userRole }) {
     var _a, _b, _c, _d, _e, _f;
     const [currentSession, setCurrentSession] = (0, react_1.useState)(activeSession);
@@ -33,25 +34,46 @@ function SessionInterface({ child, activeSession, userId, userRole }) {
     const [showRichSummary, setShowRichSummary] = (0, react_1.useState)(false);
     const router = (0, navigation_1.useRouter)();
     const activeConcerns = ((_a = child.concerns) === null || _a === void 0 ? void 0 : _a.filter((c) => c.status !== "RESOLVED")) || [];
-    // Start a new session
+    // Start a new session using Supabase
     const startSession = () => __awaiter(this, void 0, void 0, function* () {
         try {
-            const response = yield fetch("/api/sessions", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    child_id: child.id,
-                    action: "start"
-                })
-            });
-            if (response.ok) {
-                const data = yield response.json();
-                setCurrentSession(data.session);
-                sonner_1.toast.success("Session started successfully!");
+            // Check for existing session
+            const { data: existingSession, error: findError } = yield supabaseClient_1.supabase
+                .from('sessions')
+                .select('*')
+                .eq('child_id', child.id)
+                .in('status', ['PLANNED', 'IN_PROGRESS'])
+                .maybeSingle();
+            if (findError) throw findError;
+            if (existingSession) {
+                // Update to IN_PROGRESS
+                const { data: updatedSession, error: updateError } = yield supabaseClient_1.supabase
+                    .from('sessions')
+                    .update({ status: 'IN_PROGRESS', startedAt: new Date().toISOString() })
+                    .eq('id', existingSession.id)
+                    .select()
+                    .single();
+                if (updateError) throw updateError;
+                setCurrentSession(updatedSession);
+                sonner_1.toast.success('Session started successfully!');
                 router.refresh();
-            }
-            else {
-                sonner_1.toast.error("Failed to start session");
+            } else {
+                // Create new session
+                const { data: newSession, error: createError } = yield supabaseClient_1.supabase
+                    .from('sessions')
+                    .insert({
+                        child_id: child.id,
+                        volunteerId: userId,
+                        status: 'IN_PROGRESS',
+                        sessionType: 'COUNSELING',
+                        startedAt: new Date().toISOString(),
+                    })
+                    .select()
+                    .single();
+                if (createError) throw createError;
+                setCurrentSession(newSession);
+                sonner_1.toast.success('Session created and started successfully!');
+                router.refresh();
             }
         }
         catch (error) {

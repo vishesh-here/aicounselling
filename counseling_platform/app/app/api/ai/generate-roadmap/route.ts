@@ -59,7 +59,7 @@ ${activeConcerns?.map((concern: any) =>
 
 Recent Session History:
 ${recentSessions?.map((session: any, index: number) => 
-  `Session ${index + 1}: ${session.summary || "No summary"} (Status: ${session.resolutionStatus || "Unknown"})`
+  `Session ${index + 1}: ${session.summary || "No summary"} (Effectiveness: ${session.effectiveness || "Unknown"})`
 ).join("\n") || "No previous sessions"}
 
 Relevant Knowledge Chunks:

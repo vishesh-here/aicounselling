@@ -75,21 +75,7 @@ export function PreSessionBriefing({ child }: PreSessionBriefingProps) {
           ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {})
         },
         body: JSON.stringify({
-          child_id: child.id,
-          childProfile: {
-            name: child.name,
-            age: child.age,
-            state: child.state,
-            interests: child.interests,
-            challenges: child.challenges,
-            background: child.background
-          },
-          activeConcerns: activeConcerns.map((c: any) => ({
-            category: c.category,
-            title: c.title,
-            description: c.description,
-            severity: c.severity
-          }))
+          child_id: child.id
         })
       });
 
@@ -142,9 +128,16 @@ export function PreSessionBriefing({ child }: PreSessionBriefingProps) {
   const handleAddConcern = async () => {
     setSavingConcern(true);
     try {
+      // Get Supabase access token
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData?.session?.access_token;
+      
       const response = await fetch("/api/concerns", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {})
+        },
         body: JSON.stringify({
           child_id: child.id,
           title: newConcern.title,
@@ -158,7 +151,11 @@ export function PreSessionBriefing({ child }: PreSessionBriefingProps) {
         setConcerns([...concerns, result.concern]);
         setNewConcern({ title: "", description: "", category: "", severity: "LOW" });
         setShowAddConcern(false);
+      } else {
+        console.error("Failed to add concern:", result.error);
       }
+    } catch (error) {
+      console.error("Error adding concern:", error);
     } finally {
       setSavingConcern(false);
     }
@@ -166,9 +163,16 @@ export function PreSessionBriefing({ child }: PreSessionBriefingProps) {
 
   const handleResolveConcern = async (concernId: string) => {
     try {
+      // Get Supabase access token
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData?.session?.access_token;
+      
       const response = await fetch(`/api/concerns/${concernId}`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {})
+        },
       });
       const result = await response.json();
       if (response.ok && result.concern) {
@@ -177,8 +181,12 @@ export function PreSessionBriefing({ child }: PreSessionBriefingProps) {
             c.id === concernId ? result.concern : c
           )
         );
+      } else {
+        console.error("Failed to resolve concern:", result.error);
       }
-    } catch (err) {}
+    } catch (err) {
+      console.error("Error resolving concern:", err);
+    }
   };
 
   return (
@@ -343,6 +351,23 @@ export function PreSessionBriefing({ child }: PreSessionBriefingProps) {
                   </div>
                 )}
               </div>
+
+              {/* Recommended Stories */}
+              {aiRoadmap.recommendedStories && aiRoadmap.recommendedStories.length > 0 && (
+                <div className="p-4 bg-orange-50 rounded-lg border-l-4 border-orange-500">
+                  <h4 className="font-medium text-orange-900 mb-2 flex items-center gap-2">
+                    <BookOpen className="h-4 w-4" />
+                    Recommended Cultural Stories
+                  </h4>
+                  <div className="space-y-2">
+                    {aiRoadmap.recommendedStories.map((storyTitle: string, index: number) => (
+                      <div key={index} className="text-orange-800 text-sm p-2 bg-white rounded border">
+                        📖 {storyTitle}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
             <div className="text-center py-8 text-gray-500">

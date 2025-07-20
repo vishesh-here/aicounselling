@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
 import { getRagContext } from "../rag-context/route";
+import crypto from 'crypto';
 
 function getSupabaseWithAuth(req: NextRequest) {
   const authHeader = req.headers.get('authorization');
@@ -14,9 +15,10 @@ function getSupabaseWithAuth(req: NextRequest) {
     const cookieStore = cookies();
     globalHeaders['Cookie'] = cookieStore.toString();
   }
+  // Use service role key for database operations to bypass RLS
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
     { global: { headers: globalHeaders } }
   );
 }
@@ -31,7 +33,7 @@ export async function POST(request: NextRequest) {
     }
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
     // Authenticate user using the access token
     let user = null;
@@ -62,17 +64,22 @@ export async function POST(request: NextRequest) {
       conversation = foundConv;
     }
     if (!conversation) {
+      const conversationId = crypto.randomUUID();
+      console.log('Creating new conversation with ID:', conversationId);
+      
       const { data: newConv, error: convErr } = await supabase
         .from('ai_chat_conversations')
         .insert([
           {
+            id: conversationId, // Explicitly provide ID
             sessionId: sessionId ?? null,
             child_id,
             volunteerId: user.id,
             conversationName: `Session Chat - ${new Date().toLocaleDateString()}`,
             isActive: true,
-            context: null // nullable, safe to set
-            // createdAt, updatedAt omitted (DB default)
+            context: null, // nullable, safe to set
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
           }
         ])
         .select('*')
@@ -88,22 +95,48 @@ export async function POST(request: NextRequest) {
     // Build comprehensive RAG context
     let ragContext: any = null;
     try {
+      console.log('[DEBUG] About to call getRagContext...');
+      console.log('[DEBUG] getRagContext function exists:', typeof getRagContext);
+      console.log('[DEBUG] Calling getRagContext with params:', { child_id, sessionId, conversationId: conversation.id, message });
+      
       ragContext = await getRagContext(supabase, child_id, sessionId, conversation.id, message);
+      
+      console.log('[DEBUG] getRagContext completed successfully');
+      console.log('[DEBUG] getRagContext result:', ragContext ? 'Success' : 'Null/Empty');
+      if (ragContext) {
+        console.log('[DEBUG] RAG context keys:', Object.keys(ragContext));
+      }
     } catch (err) {
       console.error("RAG context missing or incomplete:", err);
+      console.error("Error details:", {
+        message: err instanceof Error ? err.message : String(err),
+        stack: err instanceof Error ? err.stack : undefined,
+        name: err instanceof Error ? err.name : undefined
+      });
       // Optionally, you could return an error here or proceed with fallback
     }
 
     // Save user message
+    const userMessageId = crypto.randomUUID();
+    console.log('Saving user message with ID:', userMessageId, 'to conversation:', conversation.id);
+    
     const { error: userMsgErr } = await supabase
       .from('ai_chat_messages')
       .insert([
         {
+          id: userMessageId, // Explicitly provide ID
           conversationId: conversation.id, // camelCase to match schema
           role: 'USER',
-          content: message
+          content: message,
+          timestamp: new Date().toISOString()
         }
       ]);
+
+    if (userMsgErr) {
+      console.error('Error saving user message:', userMsgErr);
+    } else {
+      console.log('User message saved successfully');
+    }
     if (userMsgErr) {
       return NextResponse.json({ error: 'Failed to save user message', details: userMsgErr?.message }, { status: 500 });
     }
@@ -112,17 +145,29 @@ export async function POST(request: NextRequest) {
     const aiResponse = await generateAIResponse(message, ragContext, conversation);
 
     // Save AI response with RAG context
+    const aiMessageId = crypto.randomUUID();
+    console.log('Saving AI message with ID:', aiMessageId, 'to conversation:', conversation.id);
+    console.log('AI response content:', aiResponse.content);
+    
     const { error: aiMsgErr } = await supabase
       .from('ai_chat_messages')
       .insert([
         {
+          id: aiMessageId, // Explicitly provide ID
           conversationId: conversation.id, // camelCase to match schema
           role: 'ASSISTANT',
           content: aiResponse.content,
           ragContext: ragContext,
-          metadata: aiResponse.metadata
+          metadata: aiResponse.metadata,
+          timestamp: new Date().toISOString()
         }
       ]);
+
+    if (aiMsgErr) {
+      console.error('Error saving AI message:', aiMsgErr);
+    } else {
+      console.log('AI message saved successfully');
+    }
     if (aiMsgErr) {
       return NextResponse.json({ error: 'Failed to save AI message', details: aiMsgErr?.message }, { status: 500 });
     }
@@ -133,7 +178,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       response: aiResponse.content,
       conversationId: conversation.id,
-      metadata: aiResponse.metadata
+      metadata: aiResponse.metadata,
+      ragContext: ragContext
     });
 
   } catch (error) {

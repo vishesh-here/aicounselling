@@ -1,0 +1,32 @@
+-- Fix Supabase permissions by disabling RLS temporarily
+-- Run this in your Supabase SQL editor
+
+-- Disable RLS on all tables
+ALTER TABLE users DISABLE ROW LEVEL SECURITY;
+ALTER TABLE children DISABLE ROW LEVEL SECURITY;
+ALTER TABLE knowledge_base DISABLE ROW LEVEL SECURITY;
+ALTER TABLE assignments DISABLE ROW LEVEL SECURITY;
+ALTER TABLE concerns DISABLE ROW LEVEL SECURITY;
+ALTER TABLE sessions DISABLE ROW LEVEL SECURITY;
+ALTER TABLE document_chunks DISABLE ROW LEVEL SECURITY;
+ALTER TABLE cultural_stories DISABLE ROW LEVEL SECURITY;
+ALTER TABLE ai_chat_conversations DISABLE ROW LEVEL SECURITY;
+ALTER TABLE ai_chat_messages DISABLE ROW LEVEL SECURITY;
+ALTER TABLE conversation_memories DISABLE ROW LEVEL SECURITY;
+ALTER TABLE roadmaps DISABLE ROW LEVEL SECURITY;
+ALTER TABLE session_summaries DISABLE ROW LEVEL SECURITY;
+ALTER TABLE chat_messages DISABLE ROW LEVEL SECURITY;
+ALTER TABLE tags DISABLE ROW LEVEL SECURITY;
+
+-- Grant permissions to service role
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO service_role;
+GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO service_role;
+GRANT ALL PRIVILEGES ON SCHEMA public TO service_role;
+
+-- Grant permissions to authenticated users (for future RLS)
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO authenticated;
+GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO authenticated;
+
+-- Grant permissions to anon users (for public access if needed)
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO anon;
+GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO anon; 

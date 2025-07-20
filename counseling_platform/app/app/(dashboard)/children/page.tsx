@@ -34,15 +34,22 @@ import { createClient } from '@supabase/supabase-js';
 
 interface Child {
   id: string;
-  name: string;
-  age: number;
+  fullName: string;
+  mothersName?: string;
+  fathersName?: string;
+  dateOfBirth: string;
   gender: string;
+  currentCity?: string;
   state: string;
-  district?: string;
+  educationType?: string;
+  currentSchoolCollegeName?: string;
+  currentClassSemester?: string;
+  whatsappNumber?: string;
+  callingNumber?: string;
+  parentGuardianContactNumber?: string;
   background?: string;
-  schoolLevel?: string;
-  interests: string[];
-  challenges: string[];
+  interests: (string | any)[];
+  concerns: (string | { id: string; title: string; category: string; severity: string; status: string })[];
   language: string;
   createdAt: string;
   assignments?: {
@@ -52,7 +59,7 @@ interface Child {
       specialization?: string;
     };
   }[];
-  concerns?: {
+  concernRecords?: {
     id: string;
     title: string;
     category: string;
@@ -120,27 +127,54 @@ export default function ChildrenPage() {
   const fetchChildren = async () => {
     try {
       setLoading(true);
-      // Fetch all children from Supabase
-      const { data: allChildren, error } = await supabase
-        .from('children')
-        .select('*, assignments(*, volunteer:users(id, name, specialization)), concerns(*), sessions(*)')
-        .eq('isActive', true);
-      if (error) throw error;
-      console.log('Fetched children:', allChildren);
-      let filtered = allChildren || [];
+      
+      // Get the current session
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      console.log('Session data:', session);
+      console.log('Session error:', sessionError);
+      
+      if (sessionError || !session) {
+        throw new Error('No valid session found');
+      }
+      
+      const accessToken = session.access_token;
+      console.log('Access token available:', !!accessToken);
+      
+      // Fetch all children from API endpoint with auth header
+      const response = await fetch('/api/children', {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      const responseData = await response.json();
+      console.log('Fetched children response:', responseData);
+      
+      // Check if the response contains an error
+      if (responseData.error) {
+        throw new Error(responseData.error);
+      }
+      
+      const allChildren = responseData.children || [];
+      let filtered = allChildren;
       // Apply filters in client
-      if (searchTerm) filtered = filtered.filter(child => child.name.toLowerCase().includes(searchTerm.toLowerCase()));
-      if (stateFilter && stateFilter !== 'All States') filtered = filtered.filter(child => child.state === stateFilter);
-      if (genderFilter && genderFilter !== 'All') filtered = filtered.filter(child => child.gender === genderFilter);
+      if (searchTerm) filtered = filtered.filter((child: Child) => child.fullName.toLowerCase().includes(searchTerm.toLowerCase()));
+      if (stateFilter && stateFilter !== 'All States') filtered = filtered.filter((child: Child) => child.state === stateFilter);
+      if (genderFilter && genderFilter !== 'All') filtered = filtered.filter((child: Child) => child.gender === genderFilter);
       if (ageFilter && ageFilter !== 'All') {
         const [min, max] = ageFilter.split('-');
-        filtered = filtered.filter(child => {
-          if (min && child.age < parseInt(min)) return false;
-          if (max && child.age > parseInt(max)) return false;
+        filtered = filtered.filter((child: Child) => {
+          const birthDate = new Date(child.dateOfBirth);
+          const age = new Date().getFullYear() - birthDate.getFullYear();
+          if (min && age < parseInt(min)) return false;
+          if (max && age > parseInt(max)) return false;
           return true;
         });
       }
-      if (showAssignedOnly) filtered = filtered.filter(child => child.assignments && child.assignments.length > 0);
+      if (showAssignedOnly) filtered = filtered.filter((child: Child) => child.assignments && Array.isArray(child.assignments) && child.assignments.length > 0);
       setChildren(filtered);
     } catch (error) {
       console.error('Error fetching children:', error);
@@ -267,7 +301,7 @@ export default function ChildrenPage() {
               <Heart className="h-5 w-5 text-green-600" />
               <div>
                 <p className="text-2xl font-bold text-green-600">
-                  {children.filter(c => c.assignments && c.assignments.length > 0).length}
+                  {children.filter(c => c.assignments && Array.isArray(c.assignments) && c.assignments.length > 0).length}
                 </p>
                 <p className="text-sm text-gray-600">Assigned</p>
               </div>
@@ -281,7 +315,7 @@ export default function ChildrenPage() {
               <AlertTriangle className="h-5 w-5 text-yellow-600" />
               <div>
                 <p className="text-2xl font-bold text-yellow-600">
-                  {children.filter(c => c.concerns && c.concerns.length > 0).length}
+                  {children.filter(c => c.concernRecords && Array.isArray(c.concernRecords) && c.concernRecords.length > 0).length}
                 </p>
                 <p className="text-sm text-gray-600">With Concerns</p>
               </div>
@@ -295,7 +329,7 @@ export default function ChildrenPage() {
               <BookOpen className="h-5 w-5 text-purple-600" />
               <div>
                 <p className="text-2xl font-bold text-purple-600">
-                  {children.filter(c => c.sessions && c.sessions.length > 0).length}
+                  {children.filter(c => c.sessions && Array.isArray(c.sessions) && c.sessions.length > 0).length}
                 </p>
                 <p className="text-sm text-gray-600">With Sessions</p>
               </div>
@@ -364,7 +398,7 @@ export default function ChildrenPage() {
 
       {/* Children List */}
       <div className="space-y-4">
-        {filteredChildren.length === 0 ? (
+        {children.length === 0 ? (
           <Card>
             <CardContent className="p-12 text-center">
               <Users className="h-12 w-12 text-gray-400 mx-auto mb-4" />
@@ -384,7 +418,7 @@ export default function ChildrenPage() {
             </CardContent>
           </Card>
         ) : (
-          filteredChildren.map((child) => (
+          children.map((child) => (
             <Card key={child.id} className="hover:shadow-md transition-shadow">
               <CardHeader>
                 <div className="flex items-center justify-between">
@@ -393,15 +427,15 @@ export default function ChildrenPage() {
                       <User className="h-6 w-6 text-blue-600" />
                     </div>
                     <div>
-                      <CardTitle className="text-lg">{child.name}</CardTitle>
+                      <CardTitle className="text-lg">{child.fullName}</CardTitle>
                       <CardDescription className="flex items-center space-x-4">
-                        <span>{child.age} years old</span>
+                        <span>{new Date().getFullYear() - new Date(child.dateOfBirth).getFullYear()} years old</span>
                         <Badge className={getGenderBadgeColor(child.gender)}>
                           {child.gender}
                         </Badge>
                         <span className="flex items-center">
                           <MapPin className="h-3 w-3 mr-1" />
-                          {child.district}, {child.state}
+                          {child.currentCity}, {child.state}
                         </span>
                       </CardDescription>
                     </div>
@@ -437,7 +471,7 @@ export default function ChildrenPage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 {/* Assigned Volunteer */}
-                {child.assignments && child.assignments.length > 0 && (
+                {child.assignments && Array.isArray(child.assignments) && child.assignments.length > 0 && (
                   <div className="flex items-center space-x-2 text-sm">
                     <Heart className="h-4 w-4 text-green-600" />
                     <span>Assigned to: <strong>{child.assignments[0].volunteer.name}</strong></span>
@@ -449,22 +483,25 @@ export default function ChildrenPage() {
                   </div>
                 )}
 
-                {/* School Level */}
-                {child.schoolLevel && (
+                {/* Education Information */}
+                {child.currentClassSemester && (
                   <div className="flex items-center space-x-2 text-sm">
                     <BookOpen className="h-4 w-4 text-blue-600" />
-                    <span>School Level: <strong>{child.schoolLevel}</strong></span>
+                    <span>{child.educationType}: <strong>{child.currentClassSemester}</strong></span>
+                    {child.currentSchoolCollegeName && (
+                      <span>at {child.currentSchoolCollegeName}</span>
+                    )}
                   </div>
                 )}
 
                 {/* Interests */}
-                {child.interests && child.interests.length > 0 && (
+                {child.interests && Array.isArray(child.interests) && child.interests.length > 0 && (
                   <div className="space-y-2">
                     <span className="text-sm font-medium text-gray-700">Interests:</span>
                     <div className="flex flex-wrap gap-1">
-                      {child.interests.slice(0, 5).map((interest) => (
-                        <Badge key={interest} variant="outline" className="text-xs">
-                          {interest}
+                      {child.interests.slice(0, 5).map((interest, index) => (
+                        <Badge key={typeof interest === 'string' ? interest : index} variant="outline" className="text-xs">
+                          {typeof interest === 'string' ? interest : String(interest)}
                         </Badge>
                       ))}
                       {child.interests.length > 5 && (
@@ -476,31 +513,31 @@ export default function ChildrenPage() {
                   </div>
                 )}
 
-                {/* Challenges */}
-                {child.challenges && child.challenges.length > 0 && (
+                {/* Concerns */}
+                {child.concerns && Array.isArray(child.concerns) && child.concerns.length > 0 && (
                   <div className="space-y-2">
-                    <span className="text-sm font-medium text-gray-700">Challenges:</span>
+                    <span className="text-sm font-medium text-gray-700">Concerns:</span>
                     <div className="flex flex-wrap gap-1">
-                      {child.challenges.slice(0, 3).map((challenge) => (
-                        <Badge key={challenge} variant="destructive" className="text-xs">
-                          {challenge}
+                      {child.concerns.slice(0, 3).map((concern) => (
+                        <Badge key={typeof concern === 'string' ? concern : concern.id} variant="destructive" className="text-xs">
+                          {typeof concern === 'string' ? concern : concern.title}
                         </Badge>
                       ))}
-                      {child.challenges.length > 3 && (
+                      {child.concerns.length > 3 && (
                         <Badge variant="destructive" className="text-xs">
-                          +{child.challenges.length - 3} more
+                          +{child.concerns.length - 3} more
                         </Badge>
                       )}
                     </div>
                   </div>
                 )}
 
-                {/* Active Concerns */}
-                {child.concerns && child.concerns.length > 0 && (
+                {/* Active Concern Records */}
+                {child.concernRecords && Array.isArray(child.concernRecords) && child.concernRecords.length > 0 && (
                   <div className="space-y-2">
                     <span className="text-sm font-medium text-gray-700">Active Concerns:</span>
                     <div className="flex flex-wrap gap-1">
-                      {child.concerns.slice(0, 2).map((concern) => (
+                      {child.concernRecords.slice(0, 2).map((concern) => (
                         <Badge 
                           key={concern.id} 
                           className={getSeverityColor(concern.severity)}
@@ -508,9 +545,9 @@ export default function ChildrenPage() {
                           {concern.title}
                         </Badge>
                       ))}
-                      {child.concerns.length > 2 && (
+                      {child.concernRecords.length > 2 && (
                         <Badge className="bg-gray-100 text-gray-800">
-                          +{child.concerns.length - 2} more
+                          +{child.concernRecords.length - 2} more
                         </Badge>
                       )}
                     </div>
@@ -518,7 +555,7 @@ export default function ChildrenPage() {
                 )}
 
                 {/* Recent Session */}
-                {child.sessions && child.sessions.length > 0 && (
+                {child.sessions && Array.isArray(child.sessions) && child.sessions.length > 0 && (
                   <div className="text-sm text-gray-600">
                     <Calendar className="inline h-3 w-3 mr-1" />
                     Last session: {child.sessions[0].scheduledAt ? new Date(child.sessions[0].scheduledAt).toLocaleDateString() : 'Date not set'}
@@ -541,7 +578,7 @@ export default function ChildrenPage() {
           <DialogHeader>
             <DialogTitle>Delete Child Profile</DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete {deleteDialog.child?.name}'s profile? 
+              Are you sure you want to delete {deleteDialog.child?.fullName}'s profile? 
               This action cannot be undone and will remove all associated data including sessions, concerns, and assignments.
             </DialogDescription>
           </DialogHeader>

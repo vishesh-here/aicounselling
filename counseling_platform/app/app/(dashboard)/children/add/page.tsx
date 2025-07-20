@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { AlertCircle, Loader2, Plus, X } from 'lucide-react';
+import { AlertCircle, Loader2, Plus, X, Upload } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { supabase } from '@/lib/supabaseClient';
 
@@ -40,15 +40,22 @@ const COMMON_CONCERNS = [
 ];
 
 interface FormData {
-  name: string;
-  age: string;
+  fullName: string;
+  mothersName: string;
+  fathersName: string;
+  dateOfBirth: string;
   gender: string;
+  currentCity: string;
   state: string;
-  district: string;
+  educationType: string;
+  currentSchoolCollegeName: string;
+  currentClassSemester: string;
+  whatsappNumber: string;
+  callingNumber: string;
+  parentGuardianContactNumber: string;
   background: string;
-  schoolLevel: string;
   interests: string[];
-  concerns: { title: string }[];
+  concerns: string[];
   language: string;
 }
 
@@ -59,13 +66,20 @@ interface FormErrors {
 export default function AddChildPage() {
   const router = useRouter();
   const [formData, setFormData] = useState<FormData>({
-    name: '',
-    age: '',
+    fullName: '',
+    mothersName: '',
+    fathersName: '',
+    dateOfBirth: '',
     gender: '',
+    currentCity: '',
     state: '',
-    district: '',
+    educationType: '',
+    currentSchoolCollegeName: '',
+    currentClassSemester: '',
+    whatsappNumber: '',
+    callingNumber: '',
+    parentGuardianContactNumber: '',
     background: '',
-    schoolLevel: '',
     interests: [],
     concerns: [],
     language: 'Hindi'
@@ -76,6 +90,10 @@ export default function AddChildPage() {
   const [newInterest, setNewInterest] = useState('');
   const [newConcern, setNewConcern] = useState('');
   const [session, setSession] = useState<any>(null);
+  const [showBulkUpload, setShowBulkUpload] = useState(false);
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadResults, setUploadResults] = useState<any>(null);
 
   useEffect(() => {
     const getSession = async () => {
@@ -108,16 +126,18 @@ export default function AddChildPage() {
   const validateForm = (): boolean => {
     const newErrors: FormErrors = {};
 
-    if (!formData.name?.trim()) {
-      newErrors.name = 'Child name is required';
+    if (!formData.fullName?.trim()) {
+      newErrors.fullName = 'Full name is required';
     }
 
-    if (!formData.age) {
-      newErrors.age = 'Age is required';
+    if (!formData.dateOfBirth) {
+      newErrors.dateOfBirth = 'Date of birth is required';
     } else {
-      const ageNum = parseInt(formData.age);
-      if (isNaN(ageNum) || ageNum < 5 || ageNum > 18) {
-        newErrors.age = 'Age must be between 5 and 18 years';
+      const birthDate = new Date(formData.dateOfBirth);
+      const today = new Date();
+      const age = today.getFullYear() - birthDate.getFullYear();
+      if (age < 5 || age > 18) {
+        newErrors.dateOfBirth = 'Child must be between 5 and 18 years old';
       }
     }
 
@@ -125,36 +145,49 @@ export default function AddChildPage() {
       newErrors.gender = 'Please select gender';
     }
 
+    if (!formData.currentCity?.trim()) {
+      newErrors.currentCity = 'Current city is required';
+    }
+
     if (!formData.state) {
       newErrors.state = 'Please select state';
     }
 
-    if (!formData.district?.trim()) {
-      newErrors.district = 'District is required';
+    if (!formData.educationType) {
+      newErrors.educationType = 'Please select education type';
+    }
+
+    if (!formData.currentSchoolCollegeName?.trim()) {
+      newErrors.currentSchoolCollegeName = 'School/College name is required';
+    }
+
+    if (!formData.currentClassSemester?.trim()) {
+      newErrors.currentClassSemester = 'Current class/semester is required';
+    }
+
+    if (!formData.parentGuardianContactNumber?.trim()) {
+      newErrors.parentGuardianContactNumber = 'Parent/Guardian contact number is required';
     }
 
     if (!formData.background?.trim()) {
       newErrors.background = 'Background information is required';
     }
 
-    if (!formData.schoolLevel?.trim()) {
-      newErrors.schoolLevel = 'School level is required';
-    }
+    // Interests and concerns are now optional
+    // if (formData.interests.length === 0) {
+    //   newErrors.interests = 'Please add at least one interest';
+    // }
 
-    if (formData.interests.length === 0) {
-      newErrors.interests = 'Please add at least one interest';
-    }
-
-    if (formData.concerns.length === 0) {
-      newErrors.concerns = 'Please add at least one concern';
-    }
+    // if (formData.concerns.length === 0) {
+    //   newErrors.concerns = 'Please add at least one concern';
+    // }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
   type FormDataField = keyof FormData;
-  type FormDataValue = string | string[] | { title: string }[];
+  type FormDataValue = string | string[];
   const handleInputChange = (field: FormDataField, value: FormDataValue) => {
     setFormData(prev => ({ ...prev, [field]: value }));
     // Clear error for this field when user starts typing
@@ -175,14 +208,50 @@ export default function AddChildPage() {
   };
 
   const addConcern = (concern: string) => {
-    if (concern.trim() && !formData.concerns.some(c => c.title === concern.trim())) {
-      handleInputChange('concerns', [...formData.concerns, { title: concern.trim() }]);
+    if (concern.trim() && !formData.concerns.includes(concern.trim())) {
+      handleInputChange('concerns', [...formData.concerns, concern.trim()]);
       setNewConcern('');
     }
   };
 
   const removeConcern = (concern: string) => {
-    handleInputChange('concerns', formData.concerns.filter(c => c.title !== concern));
+    handleInputChange('concerns', formData.concerns.filter(c => c !== concern));
+  };
+
+  const handleFileUpload = async () => {
+    if (!uploadFile) return;
+
+    setUploading(true);
+    setUploadResults(null);
+
+    try {
+      const formData = new FormData();
+      formData.append('file', uploadFile);
+
+      const response = await fetch('/api/children/bulk-upload', {
+        method: 'POST',
+        headers: {
+          ...(session?.access_token ? { 'Authorization': `Bearer ${session.access_token}` } : {})
+        },
+        body: formData
+      });
+
+      const result = await response.json();
+      
+      if (response.ok) {
+        setUploadResults(result);
+        setUploadFile(null);
+        // Reset file input
+        const fileInput = document.getElementById('csvFile') as HTMLInputElement;
+        if (fileInput) fileInput.value = '';
+      } else {
+        setUploadResults({ error: result.error });
+      }
+    } catch (error) {
+      setUploadResults({ error: 'Failed to upload file' });
+    } finally {
+      setUploading(false);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -198,7 +267,7 @@ export default function AddChildPage() {
       const now = new Date().toISOString();
       const payload = {
         ...formData,
-        age: parseInt(formData.age),
+        dateOfBirth: new Date(formData.dateOfBirth).toISOString(),
         interests: formData.interests,
         concerns: formData.concerns,
         isActive: true,
@@ -231,11 +300,118 @@ export default function AddChildPage() {
   };
 
   return (
-    <div className="p-6 max-w-4xl mx-auto">
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold text-gray-900">Add New Child Profile</h1>
-        <p className="text-gray-600">Create a comprehensive profile for a new child in the program</p>
+    <div className="p-6 max-w-6xl mx-auto">
+      <div className="mb-6 flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Add New Child Profile</h1>
+          <p className="text-gray-600">Create a comprehensive profile for a new child in the program</p>
+        </div>
+        <Button
+          variant="outline"
+          onClick={() => setShowBulkUpload(!showBulkUpload)}
+          className="flex items-center gap-2"
+        >
+          <Upload className="h-4 w-4" />
+          {showBulkUpload ? 'Hide' : 'Show'} Bulk Upload
+        </Button>
       </div>
+
+      {showBulkUpload && (
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle>Bulk Upload via CSV</CardTitle>
+            <CardDescription>
+              Upload multiple child profiles using a CSV file. Download the template below for the correct format.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+                             <div className="flex gap-4">
+                 <Button variant="outline" onClick={() => {
+                   const csvContent = `fullName,mothersName,fathersName,dateOfBirth,gender,currentCity,state,educationType,currentSchoolCollegeName,currentClassSemester,whatsappNumber,callingNumber,parentGuardianContactNumber,background,interests,concerns,language
+ "John Doe","Jane Doe","John Doe Sr.","2010-05-15","MALE","Mumbai","Maharashtra","School","ABC School","Class 8","9876543210","9876543210","9876543210","Single parent family","Sports,Reading","Academic pressure","English"`
+                   const blob = new Blob([csvContent], { type: 'text/csv' });
+                   const url = window.URL.createObjectURL(blob);
+                   const a = document.createElement('a');
+                   a.href = url;
+                   a.download = 'child_profiles_template.csv';
+                   a.click();
+                 }}>
+                   Download Template
+                 </Button>
+                 <div className="flex gap-2">
+                   <Input
+                     id="csvFile"
+                     type="file"
+                     accept=".csv"
+                     onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
+                     className="max-w-xs"
+                   />
+                   <Button 
+                     variant="outline" 
+                     onClick={handleFileUpload}
+                     disabled={!uploadFile || uploading}
+                   >
+                     {uploading ? (
+                       <>
+                         <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                         Uploading...
+                       </>
+                     ) : (
+                       <>
+                         <Upload className="h-4 w-4 mr-2" />
+                         Upload CSV
+                       </>
+                     )}
+                   </Button>
+                 </div>
+               </div>
+                             <p className="text-sm text-gray-600">
+                 <strong>Required fields:</strong> fullName, dateOfBirth, gender, currentCity, state, educationType, currentSchoolCollegeName, currentClassSemester, parentGuardianContactNumber, background, language<br/>
+                 <strong>Optional fields:</strong> mothersName, fathersName, whatsappNumber, callingNumber, interests, concerns<br/>
+                 <strong>Date format:</strong> YYYY-MM-DD (e.g., 2010-05-15)<br/>
+                 <strong>Arrays:</strong> Separate multiple values with commas (e.g., "Sports,Reading")
+               </p>
+
+               {uploadResults && (
+                 <div className="mt-4">
+                   {uploadResults.error ? (
+                     <Alert variant="destructive">
+                       <AlertCircle className="h-4 w-4" />
+                       <AlertDescription>{uploadResults.error}</AlertDescription>
+                     </Alert>
+                   ) : (
+                     <Alert>
+                       <AlertDescription>
+                         <div className="font-semibold">{uploadResults.message}</div>
+                         {uploadResults.results && (
+                           <div className="mt-2 text-sm">
+                             <div>✅ Successfully added: {uploadResults.results.successful}</div>
+                             <div>❌ Failed: {uploadResults.results.failed}</div>
+                             {uploadResults.results.errors && uploadResults.results.errors.length > 0 && (
+                               <div className="mt-2">
+                                 <div className="font-medium">Errors:</div>
+                                 <ul className="list-disc list-inside text-xs">
+                                   {uploadResults.results.errors.slice(0, 5).map((error: string, index: number) => (
+                                     <li key={index}>{error}</li>
+                                   ))}
+                                   {uploadResults.results.errors.length > 5 && (
+                                     <li>... and {uploadResults.results.errors.length - 5} more errors</li>
+                                   )}
+                                 </ul>
+                               </div>
+                             )}
+                           </div>
+                         )}
+                       </AlertDescription>
+                     </Alert>
+                   )}
+                 </div>
+               )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>
@@ -250,37 +426,56 @@ export default function AddChildPage() {
             <div className="space-y-4">
               <h3 className="text-lg font-medium text-gray-900">Basic Information</h3>
               
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="name">Full Name *</Label>
+                  <Label htmlFor="fullName">Full Name *</Label>
                   <Input
-                    id="name"
+                    id="fullName"
                     type="text"
-                    value={formData.name}
-                    onChange={(e) => handleInputChange('name', e.target.value)}
+                    value={formData.fullName}
+                    onChange={(e) => handleInputChange('fullName', e.target.value)}
                     placeholder="Enter child's full name"
-                    className={errors.name ? 'border-red-500' : ''}
+                    className={errors.fullName ? 'border-red-500' : ''}
                   />
-                  {errors.name && <p className="text-sm text-red-500">{errors.name}</p>}
+                  {errors.fullName && <p className="text-sm text-red-500">{errors.fullName}</p>}
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="age">Age *</Label>
+                  <Label htmlFor="mothersName">Mother's Name</Label>
                   <Input
-                    id="age"
-                    type="number"
-                    min="5"
-                    max="18"
-                    value={formData.age}
-                    onChange={(e) => handleInputChange('age', e.target.value)}
-                    placeholder="Enter age (5-18)"
-                    className={errors.age ? 'border-red-500' : ''}
+                    id="mothersName"
+                    type="text"
+                    value={formData.mothersName}
+                    onChange={(e) => handleInputChange('mothersName', e.target.value)}
+                    placeholder="Enter mother's name"
                   />
-                  {errors.age && <p className="text-sm text-red-500">{errors.age}</p>}
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="fathersName">Father's Name</Label>
+                  <Input
+                    id="fathersName"
+                    type="text"
+                    value={formData.fathersName}
+                    onChange={(e) => handleInputChange('fathersName', e.target.value)}
+                    placeholder="Enter father's name"
+                  />
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="dateOfBirth">Date of Birth *</Label>
+                  <Input
+                    id="dateOfBirth"
+                    type="date"
+                    value={formData.dateOfBirth}
+                    onChange={(e) => handleInputChange('dateOfBirth', e.target.value)}
+                    className={errors.dateOfBirth ? 'border-red-500' : ''}
+                  />
+                  {errors.dateOfBirth && <p className="text-sm text-red-500">{errors.dateOfBirth}</p>}
+                </div>
+
                 <div className="space-y-2">
                   <Label htmlFor="gender">Gender *</Label>
                   <Select value={formData.gender} onValueChange={(value) => handleInputChange('gender', value)}>
@@ -318,6 +513,19 @@ export default function AddChildPage() {
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
+                  <Label htmlFor="currentCity">Current City *</Label>
+                  <Input
+                    id="currentCity"
+                    type="text"
+                    value={formData.currentCity}
+                    onChange={(e) => handleInputChange('currentCity', e.target.value)}
+                    placeholder="Enter current city"
+                    className={errors.currentCity ? 'border-red-500' : ''}
+                  />
+                  {errors.currentCity && <p className="text-sm text-red-500">{errors.currentCity}</p>}
+                </div>
+
+                <div className="space-y-2">
                   <Label htmlFor="state">State *</Label>
                   <Select value={formData.state} onValueChange={(value) => handleInputChange('state', value)}>
                     <SelectTrigger className={errors.state ? 'border-red-500' : ''}>
@@ -331,19 +539,6 @@ export default function AddChildPage() {
                   </Select>
                   {errors.state && <p className="text-sm text-red-500">{errors.state}</p>}
                 </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="district">District *</Label>
-                  <Input
-                    id="district"
-                    type="text"
-                    value={formData.district}
-                    onChange={(e) => handleInputChange('district', e.target.value)}
-                    placeholder="Enter district name"
-                    className={errors.district ? 'border-red-500' : ''}
-                  />
-                  {errors.district && <p className="text-sm text-red-500">{errors.district}</p>}
-                </div>
               </div>
             </div>
 
@@ -351,21 +546,95 @@ export default function AddChildPage() {
             <div className="space-y-4">
               <h3 className="text-lg font-medium text-gray-900">Educational Information</h3>
               
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="schoolLevel">School Level *</Label>
+                  <Label htmlFor="educationType">Are you in School or College? *</Label>
+                  <Select value={formData.educationType} onValueChange={(value) => handleInputChange('educationType', value)}>
+                    <SelectTrigger className={errors.educationType ? 'border-red-500' : ''}>
+                      <SelectValue placeholder="Select education type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="School">School</SelectItem>
+                      <SelectItem value="College">College</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {errors.educationType && <p className="text-sm text-red-500">{errors.educationType}</p>}
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="currentSchoolCollegeName">Current School/College Name *</Label>
                   <Input
-                    id="schoolLevel"
+                    id="currentSchoolCollegeName"
                     type="text"
-                    value={formData.schoolLevel}
-                    onChange={(e) => handleInputChange('schoolLevel', e.target.value)}
-                    placeholder="e.g., Class 8, Class 10, etc."
-                    className={errors.schoolLevel ? 'border-red-500' : ''}
+                    value={formData.currentSchoolCollegeName}
+                    onChange={(e) => handleInputChange('currentSchoolCollegeName', e.target.value)}
+                    placeholder="Enter school/college name"
+                    className={errors.currentSchoolCollegeName ? 'border-red-500' : ''}
                   />
-                  {errors.schoolLevel && <p className="text-sm text-red-500">{errors.schoolLevel}</p>}
+                  {errors.currentSchoolCollegeName && <p className="text-sm text-red-500">{errors.currentSchoolCollegeName}</p>}
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="currentClassSemester">Current Class/Semester *</Label>
+                  <Input
+                    id="currentClassSemester"
+                    type="text"
+                    value={formData.currentClassSemester}
+                    onChange={(e) => handleInputChange('currentClassSemester', e.target.value)}
+                    placeholder="e.g., Class 8, Semester 2"
+                    className={errors.currentClassSemester ? 'border-red-500' : ''}
+                  />
+                  {errors.currentClassSemester && <p className="text-sm text-red-500">{errors.currentClassSemester}</p>}
                 </div>
               </div>
+            </div>
 
+            {/* Contact Information */}
+            <div className="space-y-4">
+              <h3 className="text-lg font-medium text-gray-900">Contact Information</h3>
+              
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="whatsappNumber">WhatsApp Number</Label>
+                  <Input
+                    id="whatsappNumber"
+                    type="tel"
+                    value={formData.whatsappNumber}
+                    onChange={(e) => handleInputChange('whatsappNumber', e.target.value)}
+                    placeholder="Enter WhatsApp number"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="callingNumber">Calling Number (if different)</Label>
+                  <Input
+                    id="callingNumber"
+                    type="tel"
+                    value={formData.callingNumber}
+                    onChange={(e) => handleInputChange('callingNumber', e.target.value)}
+                    placeholder="Enter calling number"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="parentGuardianContactNumber">Parent/Guardian Contact Number *</Label>
+                  <Input
+                    id="parentGuardianContactNumber"
+                    type="tel"
+                    value={formData.parentGuardianContactNumber}
+                    onChange={(e) => handleInputChange('parentGuardianContactNumber', e.target.value)}
+                    placeholder="Enter parent/guardian number"
+                    className={errors.parentGuardianContactNumber ? 'border-red-500' : ''}
+                  />
+                  {errors.parentGuardianContactNumber && <p className="text-sm text-red-500">{errors.parentGuardianContactNumber}</p>}
+                </div>
+              </div>
+            </div>
+
+            {/* Background Information */}
+            <div className="space-y-4">
+              <h3 className="text-lg font-medium text-gray-900">Background Information</h3>
+              
               <div className="space-y-2">
                 <Label htmlFor="background">Background Information *</Label>
                 <Textarea
@@ -382,7 +651,7 @@ export default function AddChildPage() {
 
             {/* Interests */}
             <div className="space-y-4">
-              <h3 className="text-lg font-medium text-gray-900">Interests *</h3>
+              <h3 className="text-lg font-medium text-gray-900">Interests (Optional)</h3>
               
               <div className="space-y-2">
                 <Label>Add Interests</Label>
@@ -443,12 +712,11 @@ export default function AddChildPage() {
                   </div>
                 </div>
               )}
-              {errors.interests && <p className="text-sm text-red-500">{errors.interests}</p>}
             </div>
 
             {/* Concerns */}
             <div className="space-y-4">
-              <h3 className="text-lg font-medium text-gray-900">Concerns *</h3>
+              <h3 className="text-lg font-medium text-gray-900">Concerns (Optional)</h3>
               <div className="space-y-2">
                 <Label>Add Concerns</Label>
                 <div className="flex gap-2">
@@ -478,7 +746,7 @@ export default function AddChildPage() {
                   {COMMON_CONCERNS.map(concern => (
                     <Badge
                       key={concern}
-                      variant={formData.concerns.some(c => c.title === concern) ? "default" : "outline"}
+                      variant={formData.concerns.includes(concern) ? "default" : "outline"}
                       className="cursor-pointer"
                       onClick={() => addConcern(concern)}
                     >
@@ -492,11 +760,11 @@ export default function AddChildPage() {
                   <Label>Selected Concerns</Label>
                   <div className="flex flex-wrap gap-2">
                     {formData.concerns.map(concern => (
-                      <Badge key={concern.title} variant="destructive" className="flex items-center gap-1">
-                        {concern.title}
+                      <Badge key={concern} variant="destructive" className="flex items-center gap-1">
+                        {concern}
                         <button
                           type="button"
-                          onClick={() => removeConcern(concern.title)}
+                          onClick={() => removeConcern(concern)}
                           className="ml-1 hover:text-red-300"
                         >
                           <X className="h-3 w-3" />
@@ -506,7 +774,6 @@ export default function AddChildPage() {
                   </div>
                 </div>
               )}
-              {errors.concerns && <p className="text-sm text-red-500">{errors.concerns}</p>}
             </div>
 
             {/* Error Display */}

@@ -19,8 +19,6 @@ export default function DashboardPage() {
   const [dashboardStats, setDashboardStats] = useState<any>(null);
   const [assignments, setAssignments] = useState<any[]>([]);
   const [recentSessions, setRecentSessions] = useState<any[]>([]);
-  const [concernAnalytics, setConcernAnalytics] = useState<any[]>([]);
-  const [stateData, setStateData] = useState<any[]>([]);
   const [childrenByState, setChildrenByState] = useState<any[]>([]);
   const [volunteersByState, setVolunteersByState] = useState<any[]>([]);
   const [selectedHeatmap, setSelectedHeatmap] = useState<'children' | 'volunteers'>('children');
@@ -31,87 +29,27 @@ export default function DashboardPage() {
       setLoading(true);
       setError(null);
       try {
-        // Get session
-        const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-        if (sessionError || !sessionData.session) throw sessionError || new Error("No session");
-        const user = sessionData.session.user;
-        console.log('Dashboard user:', user);
-        const role = user.user_metadata?.role || user.app_metadata?.role || "VOLUNTEER";
-        setUserRole(role);
-        // Fetch assignments for volunteer
-        let assignmentsData: any[] = [];
-        if (role === "VOLUNTEER") {
-          const { data: assign, error: assignError } = await supabase
-            .from("assignments")
-            .select("*, child(*)")
-            .eq("volunteerId", user.id)
-            .eq("isActive", true);
-          if (assignError) throw assignError;
-          assignmentsData = assign || [];
-          setAssignments(assignmentsData);
+        // Get the current session
+        const { data: { session } } = await supabase.auth.getSession();
+        const accessToken = session?.access_token;
+        
+        // Fetch all dashboard data from API endpoint with auth header
+        const response = await fetch('/api/dashboard', {
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
         }
-        // Fetch recent sessions for volunteer
-        let sessionsData: any[] = [];
-        if (role === "VOLUNTEER") {
-          const { data: sessions, error: sessionsError } = await supabase
-            .from("sessions")
-            .select("*, child(name, age), summary(resolutionStatus)")
-            .eq("volunteerId", user.id)
-            .order("createdAt", { ascending: false })
-            .limit(5);
-          if (sessionsError) throw sessionsError;
-          sessionsData = sessions || [];
-          setRecentSessions(sessionsData);
-        }
-        // Fetch concern analytics data
-        const { data: concernData, error: concernError } = await supabase
-          .from('concerns')
-          .select('id, category, child_id');
-        if (concernError) throw concernError;
-        // Fetch children for age
-        const { data: childrenData, error: childrenError } = await supabase
-          .from('children')
-          .select('id, age, isActive');
-        if (childrenError) throw childrenError;
-        // Group by age group and category
-        const analytics: any[] = [];
-        (concernData || []).forEach((concern: any) => {
-          const child = (childrenData || []).find((c: any) => c.id === concern.child_id && c.isActive);
-          if (!child) return;
-          let age_group = '';
-          if (child.age >= 6 && child.age <= 10) age_group = '6-10';
-          else if (child.age >= 11 && child.age <= 13) age_group = '11-13';
-          else if (child.age >= 14 && child.age <= 16) age_group = '14-16';
-          else age_group = '17+';
-          const existing = analytics.find(a => a.age_group === age_group && a.category === concern.category);
-          if (existing) existing.count += 1;
-          else analytics.push({ age_group, category: concern.category, count: 1 });
-        });
-        setConcernAnalytics(analytics);
-        // Fetch children and volunteers for IndiaMap heatmaps
-        const { data: children, error: childrenMapError } = await supabase
-          .from('children')
-          .select('id, state')
-          .neq('state', null);
-        const { data: volunteers, error: volunteersError } = await supabase
-          .from('users')
-          .select('id, state, role')
-          .eq('role', 'VOLUNTEER')
-          .neq('state', null);
-        if (childrenMapError || volunteersError) throw childrenMapError || volunteersError;
-        // Aggregate children by state
-        const childrenStateMap: Record<string, number> = {};
-        (children || []).forEach((c: any) => {
-          if (c.state) childrenStateMap[c.state] = (childrenStateMap[c.state] || 0) + 1;
-        });
-        setChildrenByState(Object.entries(childrenStateMap).map(([state, value]) => ({ state, value })));
-        // Aggregate volunteers by state
-        const volunteersStateMap: Record<string, number> = {};
-        (volunteers || []).forEach((v: any) => {
-          if (v.state) volunteersStateMap[v.state] = (volunteersStateMap[v.state] || 0) + 1;
-        });
-        setVolunteersByState(Object.entries(volunteersStateMap).map(([state, value]) => ({ state, value })));
-        // For admin, you may want to fetch additional analytics data here (already handled in child components)
+        const data = await response.json();
+        
+        setUserRole(data.userRole);
+        setAssignments(data.assignments || []);
+        setRecentSessions(data.recentSessions || []);
+        setChildrenByState(data.childrenByState || []);
+        setVolunteersByState(data.volunteersByState || []);
         setDashboardStats({}); // Placeholder if you want to add stats
       } catch (err: any) {
         setError(err.message || "Failed to load dashboard");
@@ -182,7 +120,7 @@ export default function DashboardPage() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <ConcernAnalytics data={concernAnalytics} />
+                  <ConcernAnalytics />
                 </CardContent>
               </Card>
             </>

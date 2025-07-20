@@ -31,16 +31,30 @@ export default function SessionPage() {
         const role = user.user_metadata?.role || user.app_metadata?.role || "VOLUNTEER";
         setUserRole(role);
         setUserId(user.id);
+        
         // Get child_id from params
         const child_id = params?.id as string;
-        // Fetch child data
-        const { data: child, error: childError } = await supabase
-          .from("children")
-          .select("*, assignments(*), concerns(*), isActive")
-          .eq("id", child_id)
-          .maybeSingle();
-        if (childError || !child) throw childError || new Error("Child not found");
+        
+        // Fetch child data via API endpoint with auth header
+        const accessToken = sessionObj.session.access_token;
+        const response = await fetch(`/api/children/${child_id}`, {
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || "Failed to fetch child data");
+        }
+        
+        const responseData = await response.json();
+        const child = responseData.child; // Extract child from response
         setChildData(child);
+        
+        console.log('Child data loaded:', child);
+        
         // Access control for volunteers
         if (role === "VOLUNTEER") {
           const hasAccess = (child.assignments || []).some(
@@ -48,15 +62,22 @@ export default function SessionPage() {
           );
           if (!hasAccess) throw new Error("Access denied");
         }
-        // Fetch active session for this child
-        const { data: activeSession, error: sessionFetchError } = await supabase
-          .from("sessions")
-          .select("*")
-          .eq("child_id", child_id)
-          .in("status", ["PLANNED", "IN_PROGRESS"])
-          .maybeSingle();
-        if (sessionFetchError) throw sessionFetchError;
-        setSessionData(activeSession);
+        
+        // Fetch active session for this child via API
+        const sessionResponse = await fetch(`/api/sessions?child_id=${child_id}`, {
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (sessionResponse.ok) {
+          const sessionData = await sessionResponse.json();
+          setSessionData(sessionData.session);
+        } else {
+          console.log('No active session found or error fetching session');
+          setSessionData(null);
+        }
       } catch (err: any) {
         setError(err.message || "Failed to load session");
       } finally {
@@ -98,10 +119,10 @@ export default function SessionPage() {
           </Link>
           <div>
             <h1 className="text-2xl font-bold text-gray-900">
-              Session with {childData?.name}
+              Session with {childData?.fullName}
             </h1>
             <p className="text-gray-600">
-              {childData?.age} years old • {childData?.state}
+              {childData?.dateOfBirth ? Math.floor((new Date().getTime() - new Date(childData.dateOfBirth).getTime()) / (1000 * 60 * 60 * 24 * 365.25)) : ''} years old • {childData?.state}
             </p>
           </div>
         </div>
@@ -118,12 +139,18 @@ export default function SessionPage() {
         </div>
       </div>
       {/* Session Interface */}
-      <SessionInterface
-        child={childData}
-        activeSession={sessionData}
-        userId={userId}
-        userRole={userRole}
-      />
+      {childData ? (
+        <SessionInterface
+          child={childData}
+          activeSession={sessionData}
+          userId={userId}
+          userRole={userRole}
+        />
+      ) : (
+        <div className="text-center py-8">
+          <p>Loading child data...</p>
+        </div>
+      )}
     </div>
   );
 }

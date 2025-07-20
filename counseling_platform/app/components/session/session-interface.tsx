@@ -55,46 +55,40 @@ export function SessionInterface({ child, activeSession, userId, userRole }: Ses
     fetchPersistedRoadmap();
   }, [child.id, currentSession?.id]);
 
-  // Start a new session using Supabase
+  // Start a new session using API
   const startSession = async () => {
+    if (!child || !child.id) {
+      toast.error("Child data not available");
+      return;
+    }
+    
     try {
-      // Check for existing session
-      const { data: existingSession, error: findError } = await supabase
-        .from('sessions')
-        .select('*')
-        .eq('child_id', child.id)
-        .in('status', ['PLANNED', 'IN_PROGRESS'])
-        .maybeSingle();
-      if (findError) throw findError;
-      if (existingSession) {
-        // Update to IN_PROGRESS
-        const { data: updatedSession, error: updateError } = await supabase
-          .from('sessions')
-          .update({ status: 'IN_PROGRESS', startedAt: new Date().toISOString() })
-          .eq('id', existingSession.id)
-          .select()
-          .single();
-        if (updateError) throw updateError;
-        setCurrentSession(updatedSession);
-        toast.success('Session started successfully!');
+      // Get Supabase access token
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData?.session?.access_token;
+      
+      console.log('Starting session for child:', child.id, child.fullName);
+      
+      const response = await fetch("/api/sessions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {})
+        },
+        body: JSON.stringify({
+          child_id: child.id,
+          action: "start"
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setCurrentSession(data.session);
+        toast.success("Session started successfully!");
         router.refresh();
       } else {
-        // Create new session
-        const { data: newSession, error: createError } = await supabase
-          .from('sessions')
-          .insert({
-            child_id: child.id,
-            volunteerId: userId,
-            status: 'IN_PROGRESS',
-            sessionType: 'COUNSELING',
-            startedAt: new Date().toISOString(),
-          })
-          .select()
-          .single();
-        if (createError) throw createError;
-        setCurrentSession(newSession);
-        toast.success('Session created and started successfully!');
-        router.refresh();
+        const errorData = await response.json();
+        toast.error(errorData.error || "Failed to start session");
       }
     } catch (error) {
       console.error('Error starting session:', error);
@@ -108,46 +102,35 @@ export function SessionInterface({ child, activeSession, userId, userRole }: Ses
     setShowRichSummary(true);
   };
 
-  // Save session summary (draft or final) using Supabase
+  // Save session summary (draft or final) using API route
   const saveSessionSummary = async (summaryData: any, isDraft: boolean) => {
     try {
-      // Upsert session summary
-      const { data: existingSummary, error: findError } = await supabase
-        .from('session_summaries')
-        .select('*')
-        .eq('sessionId', currentSession.id)
-        .maybeSingle();
-      if (findError) throw findError;
-      const summaryPayload = {
-        sessionId: currentSession.id,
-        ...summaryData,
-        summary: summaryData.summary || "",
-      };
-      let result;
-      if (existingSummary) {
-        result = await supabase
-          .from('session_summaries')
-          .update(summaryPayload)
-          .eq('sessionId', currentSession.id);
-      } else {
-        result = await supabase
-          .from('session_summaries')
-          .insert(summaryPayload);
+      // Get Supabase access token
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData?.session?.access_token;
+      
+      const response = await fetch("/api/sessions/summary", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {})
+        },
+        body: JSON.stringify({
+          sessionId: currentSession.id,
+          summaryData: {
+            ...summaryData,
+            summary: summaryData.summary || "",
+          },
+          isDraft
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to save summary');
       }
-      if (result.error) throw result.error;
-      // If this is a final submission, update the session row as well
-      if (!isDraft) {
-        const now = new Date().toISOString();
-        const { error: sessionUpdateError } = await supabase
-          .from('sessions')
-          .update({
-            status: 'COMPLETED',
-            endedAt: now,
-            updatedAt: now
-          })
-          .eq('id', currentSession.id);
-        if (sessionUpdateError) throw sessionUpdateError;
-      }
+
+      const result = await response.json();
       toast.success(isDraft ? 'Session summary saved as draft' : 'Session ended and summary submitted successfully!');
       if (!isDraft) router.push(`/children/${child.id}`);
     } catch (error) {
@@ -177,11 +160,19 @@ export function SessionInterface({ child, activeSession, userId, userRole }: Ses
 
   // Generate enhanced AI roadmap
   const generateEnhancedRoadmap = async () => {
+    if (!child || !child.id) {
+      toast.error("Child data not available");
+      return;
+    }
+    
     setLoadingRoadmap(true);
     try {
       // Get Supabase access token
       const { data: sessionData } = await supabase.auth.getSession();
       const accessToken = sessionData?.session?.access_token;
+      
+      console.log('Generating roadmap for child:', child.id, child.fullName);
+      
       const response = await fetch("/api/ai/enhanced-roadmap", {
         method: "POST",
         headers: {
@@ -190,20 +181,6 @@ export function SessionInterface({ child, activeSession, userId, userRole }: Ses
         },
         body: JSON.stringify({
           child_id: child.id,
-          childProfile: {
-            name: child.name,
-            age: child.age,
-            interests: child.interests,
-            challenges: child.challenges,
-            background: child.background,
-            state: child.state
-          },
-          activeConcerns: activeConcerns.map((c: any) => ({
-            category: c.category,
-            title: c.title,
-            severity: c.severity,
-            description: c.description
-          })),
           session_id: currentSession?.id || null
         })
       });
@@ -227,10 +204,20 @@ export function SessionInterface({ child, activeSession, userId, userRole }: Ses
   // Load story details
   const loadStoryDetails = async (storyId: string) => {
     try {
-      const response = await fetch(`/api/stories/${storyId}`);
+      // Get Supabase access token
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData?.session?.access_token;
+      
+      const response = await fetch(`/api/stories/${storyId}`, {
+        headers: {
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {})
+        }
+      });
       if (response.ok) {
         const story = await response.json();
         setSelectedStory(story);
+      } else {
+        console.error("Failed to load story:", response.status, response.statusText);
       }
     } catch (error) {
       console.error("Failed to load story:", error);
@@ -248,7 +235,9 @@ export function SessionInterface({ child, activeSession, userId, userRole }: Ses
               Session Control
             </span>
             <div className="flex items-center gap-2">
-              {currentSession ? (
+              {!child || !child.id ? (
+                <div className="text-sm text-gray-500">Loading child data...</div>
+              ) : currentSession ? (
                 <>
                   {currentSession.status === "PLANNED" && (
                     <Button onClick={startSession} className="bg-green-600 hover:bg-green-700">
@@ -319,13 +308,17 @@ export function SessionInterface({ child, activeSession, userId, userRole }: Ses
             <CardHeader>
               <div className="flex items-center justify-between">
                 <CardTitle>AI-Enhanced Session Roadmap</CardTitle>
-                <Button 
-                  onClick={generateEnhancedRoadmap}
-                  disabled={loadingRoadmap}
-                  className="bg-purple-600 hover:bg-purple-700"
-                >
-                  {loadingRoadmap ? "Generating..." : "Generate Enhanced Roadmap"}
-                </Button>
+                {!child || !child.id ? (
+                  <div className="text-sm text-gray-500">Loading child data...</div>
+                ) : (
+                  <Button 
+                    onClick={generateEnhancedRoadmap}
+                    disabled={loadingRoadmap}
+                    className="bg-purple-600 hover:bg-purple-700"
+                  >
+                    {loadingRoadmap ? "Generating..." : "Generate Enhanced Roadmap"}
+                  </Button>
+                )}
               </div>
             </CardHeader>
             <CardContent>
@@ -412,6 +405,23 @@ export function SessionInterface({ child, activeSession, userId, userRole }: Ses
                       </ul>
                     </div>
                   </div>
+
+                  {/* Recommended Stories */}
+                  {aiRoadmap.recommendedStories && aiRoadmap.recommendedStories.length > 0 && (
+                    <div className="p-4 bg-orange-50 rounded-lg border-l-4 border-orange-500">
+                      <h4 className="font-medium text-orange-900 mb-2 flex items-center gap-2">
+                        <BookOpen className="h-4 w-4" />
+                        Recommended Cultural Stories
+                      </h4>
+                      <div className="space-y-2">
+                        {aiRoadmap.recommendedStories.map((storyTitle: string, index: number) => (
+                          <div key={index} className="text-orange-800 text-sm p-2 bg-white rounded border">
+                            📖 {storyTitle}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="text-center py-8 text-gray-500">

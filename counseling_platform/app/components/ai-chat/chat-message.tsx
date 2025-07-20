@@ -72,7 +72,7 @@ export function ChatMessage({ role, content, timestamp, metadata, isAdmin, ragCo
         </div>
 
         {/* Kebab menu for admin debug (only for latest AI message) */}
-        {isAdmin && ragContext && ragContext.length > 0 && onShowRagModal && (
+        {isAdmin && ragContext && onShowRagModal && (
           <div className="flex justify-end mt-1">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>

@@ -17,7 +17,10 @@ export function ConcernAnalytics() {
         const { data: { session } } = await supabase.auth.getSession();
         const accessToken = session?.access_token;
         const response = await fetch('/api/dashboard/concern-analytics', {
-          headers: { Authorization: `Bearer ${accessToken}` }
+          headers: { 
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json'
+          }
         });
         const result = await response.json();
         if (!result.data) throw new Error('Failed to fetch concern analytics');

@@ -71,7 +71,7 @@ export async function getRagContext(
         const { data: allSummaries, error: summariesError } = await supabase
           .from('session_summaries')
           .select('*')
-          .in('sessionId', sessionIds);
+          .in('sessionid', sessionIds);
         if (summariesError) {
           throw new Error('Failed to fetch session summaries: ' + (typeof summariesError === 'object' && summariesError !== null && 'message' in summariesError ? (summariesError as any).message : String(summariesError)));
         }
@@ -110,7 +110,8 @@ export async function getRagContext(
   const queryEmbedding = embeddingResponse.data[0].embedding;
 
   // 3. Call the vector search RPC to get relevant chunks
-  let ragChunks, ragError;
+  let ragChunks = [];
+  let ragError;
   try {
     const { supabase: supabaseClient } = await import("@/lib/supabaseClient");
     const rpcRes = await supabaseClient.rpc(
@@ -120,13 +121,15 @@ export async function getRagContext(
         match_count: 8
       }
     );
-    ragChunks = rpcRes.data;
+    ragChunks = rpcRes.data || [];
     ragError = rpcRes.error;
   } catch (rpcErr: any) {
-    throw new Error('Supabase RPC failed: ' + (rpcErr?.message || String(rpcErr)));
+    console.warn('Vector search failed, continuing without knowledge chunks:', rpcErr?.message || String(rpcErr));
+    ragChunks = [];
   }
   if (ragError) {
-    throw new Error('Supabase RPC returned error: ' + (typeof ragError === 'object' && ragError !== null && 'message' in ragError ? (ragError as any).message : String(ragError)));
+    console.warn('Supabase RPC returned error, continuing without knowledge chunks:', ragError);
+    ragChunks = [];
   }
 
   // 4. Build and return the unified RAG context

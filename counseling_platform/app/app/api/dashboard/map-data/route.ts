@@ -34,11 +34,11 @@ export async function GET(request: NextRequest) {
       childrenByState[c.state] = (childrenByState[c.state] || 0) + 1;
     }
   });
-  // Get volunteers count by state
+  // Get volunteers count by state (including admins)
   const { data: volunteersByStateRaw, error: volunteersError } = await supabase
     .from('users')
     .select('state, id, role, isActive')
-    .eq('role', 'VOLUNTEER')
+    .in('role', ['VOLUNTEER', 'ADMIN'])
     .eq('isActive', true)
     .not('state', 'is', null);
   // Group volunteers by state in JS

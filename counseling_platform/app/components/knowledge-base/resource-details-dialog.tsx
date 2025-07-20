@@ -100,7 +100,7 @@ export function ResourceDetailsDialog({ resource, trigger }: ResourceDetailsDial
                   <span>{resource.createdBy?.name}</span>
                   <span className="mx-2">•</span>
                   <Calendar className="h-3 w-3 mr-1" />
-                  <span>{formatDistanceToNow(new Date(resource.created_at))} ago</span>
+                                      <span>{resource.createdAt ? formatDistanceToNow(new Date(resource.createdAt)) + ' ago' : 'Recently'}</span>
                 </div>
               </div>
               
