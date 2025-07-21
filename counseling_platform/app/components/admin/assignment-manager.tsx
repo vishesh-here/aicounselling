@@ -41,8 +41,8 @@ export function AssignmentManager() {
           return;
         }
 
-        // Fetch children
-        const childrenResponse = await fetch('/api/children', {
+        // Fetch all children for admin assignment tool
+        const childrenResponse = await fetch('/api/children/all', {
           headers: {
             'Authorization': `Bearer ${accessToken}`,
             'Content-Type': 'application/json'

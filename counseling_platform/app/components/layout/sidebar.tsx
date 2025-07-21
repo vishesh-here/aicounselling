@@ -17,6 +17,7 @@ import {
   Heart,
   ChevronDown,
   UserPlus,
+  Upload,
 } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 
@@ -29,7 +30,7 @@ const navigation = [
     name: "Dashboard",
     href: "/dashboard",
     icon: LayoutDashboard,
-    roles: ["ADMIN", "VOLUNTEER"],
+    roles: ["ADMIN"], // Only show to admins for now
   },
   {
     name: "Children",
@@ -47,15 +48,15 @@ const navigation = [
 
 const adminNavigation = [
   {
-    name: "User Approvals",
-    href: "/admin/user-approvals",
-    icon: UserCheck,
-    roles: ["ADMIN"],
-  },
-  {
     name: "Assignments",
     href: "/admin/assignments",
     icon: UserPlus,
+    roles: ["ADMIN"],
+  },
+  {
+    name: "Bulk Import",
+    href: "/admin/bulk-import",
+    icon: Upload,
     roles: ["ADMIN"],
   },
   {
@@ -127,7 +128,9 @@ export function Sidebar({ className }: SidebarProps) {
 
       {/* Navigation */}
       <nav className="flex-1 space-y-1 px-2 py-4">
-        {navigation.map((item) => {
+        {navigation
+          .filter((item) => item.roles.includes(userRole || 'VOLUNTEER'))
+          .map((item) => {
           const isActive = pathname === item.href;
           return (
             <Link key={item.name} href={item.href}>

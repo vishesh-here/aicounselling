@@ -21,6 +21,15 @@ SET content = TRIM(SUBSTRING(content FROM POSITION(' ' IN content) + 1))
 WHERE content LIKE 'Type: cultural_story%' 
    OR content LIKE 'Type: knowledge_base%';
 
+-- Step 2.5: Remove direct type prefixes from content (for cases without "Type: ")
+UPDATE knowledge_base 
+SET content = TRIM(REPLACE(content, 'cultural_story ', ''))
+WHERE content LIKE 'cultural_story %';
+
+UPDATE knowledge_base 
+SET content = TRIM(REPLACE(content, 'knowledge_base ', ''))
+WHERE content LIKE 'knowledge_base %';
+
 -- Step 3: Set default category for resources that don't have proper category
 UPDATE knowledge_base 
 SET category = 'CULTURAL_WISDOM' 

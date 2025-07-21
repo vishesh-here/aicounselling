@@ -9,6 +9,7 @@ import { ConcernAnalytics } from "@/components/dashboard/concern-analytics";
 import { IndiaMap } from "@/components/dashboard/india-map";
 import { RecentSessions } from "@/components/dashboard/recent-sessions";
 import { TrendAnalytics } from "@/components/dashboard/trend-analytics";
+import BirthdayNotifications from "@/components/dashboard/birthday-notifications";
 
 export const dynamic = "force-dynamic";
 
@@ -88,6 +89,9 @@ export default function DashboardPage() {
 
       {/* Stats Cards */}
       <DashboardStats />
+
+      {/* Birthday Notifications */}
+      <BirthdayNotifications />
 
       {/* Main Content Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

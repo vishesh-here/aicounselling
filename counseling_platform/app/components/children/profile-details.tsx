@@ -1,12 +1,14 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { 
   User, MapPin, Calendar, Phone, GraduationCap, 
-  Heart, Star, AlertCircle, Edit, BookOpen, Bot, ExternalLink
+  Heart, Star, AlertCircle, Edit, BookOpen, Bot, ExternalLink,
+  Gift, Mail, MessageCircle, Users
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
@@ -64,6 +66,29 @@ export default function ProfileDetails({ child }: ProfileDetailsProps) {
     }
   };
 
+  // Check if today is the child's birthday
+  const isBirthdayToday = () => {
+    if (!child.dateOfBirth) return false;
+    const today = new Date();
+    const birthDate = new Date(child.dateOfBirth);
+    return today.getMonth() === birthDate.getMonth() && today.getDate() === birthDate.getDate();
+  };
+
+  // Calculate age from date of birth
+  const calculateAge = () => {
+    if (!child.dateOfBirth) return null;
+    const today = new Date();
+    const birthDate = new Date(child.dateOfBirth);
+    const age = today.getFullYear() - birthDate.getFullYear();
+    const monthDiff = today.getMonth() - birthDate.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+      return age - 1;
+    }
+    return age;
+  };
+
+  const age = calculateAge();
+
   return (
     <div className="space-y-6">
       {/* Basic Information */}
@@ -75,44 +100,62 @@ export default function ProfileDetails({ child }: ProfileDetailsProps) {
               Basic Information
             </CardTitle>
             <div className="flex items-center gap-2">
-              {(role === "VOLUNTEER" || role === "ADMIN") && (
-                <Button 
-                  size="sm" 
-                  onClick={openAiMentor}
-                  className="bg-purple-600 hover:bg-purple-700"
-                >
-                  <Bot className="h-4 w-4 mr-2" />
-                  AI Mentor
-                  <ExternalLink className="h-3 w-3 ml-1" />
-                </Button>
-              )}
               {role === "ADMIN" && (
-                <Button size="sm" variant="outline">
-                  <Edit className="h-4 w-4 mr-2" />
-                  Edit Profile
-                </Button>
+                <Link href={`/children/${child.id}/edit`}>
+                  <Button size="sm" variant="outline">
+                    <Edit className="h-4 w-4 mr-2" />
+                    Edit Profile
+                  </Button>
+                </Link>
               )}
             </div>
           </div>
         </CardHeader>
         <CardContent>
+          {/* Birthday Alert */}
+          {isBirthdayToday() && (
+            <div className="mb-6 p-4 bg-gradient-to-r from-pink-50 to-purple-50 border border-pink-200 rounded-lg">
+              <div className="flex items-center gap-3">
+                <Gift className="h-6 w-6 text-pink-600" />
+                <div>
+                  <h3 className="font-semibold text-pink-800">🎉 Happy Birthday!</h3>
+                  <p className="text-pink-700 text-sm">
+                    Today is {child.fullName || child.name}'s birthday! They are turning {age} today.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-4">
               <div>
                 <label className="text-sm font-medium text-gray-700">Full Name</label>
-                <p className="text-gray-900 font-medium">{child.name}</p>
+                <p className="text-gray-900 font-medium">{child.fullName || child.name}</p>
               </div>
               
               <div>
+                <label className="text-sm font-medium text-gray-700">Date of Birth</label>
+                <div className="flex items-center gap-2">
+                  <Calendar className="h-4 w-4 text-gray-500" />
+                  <span className="text-gray-900">
+                    {child.dateOfBirth ? format(new Date(child.dateOfBirth), "PPP") : "Not specified"}
+                  </span>
+                </div>
+              </div>
+
+              <div>
                 <label className="text-sm font-medium text-gray-700">Age</label>
-                <p className="text-gray-900">{child.age} years old</p>
+                <p className="text-gray-900">
+                  {age !== null ? `${age} years old` : "Age not available"}
+                </p>
               </div>
               
               <div>
                 <label className="text-sm font-medium text-gray-700">Gender</label>
                 <div className="flex items-center gap-2">
                   {getGenderIcon(child.gender)}
-                  <span className="text-gray-900 capitalize">{child.gender.toLowerCase()}</span>
+                  <span className="text-gray-900 capitalize">{child.gender?.toLowerCase()}</span>
                 </div>
               </div>
 
@@ -120,29 +163,41 @@ export default function ProfileDetails({ child }: ProfileDetailsProps) {
                 <label className="text-sm font-medium text-gray-700">Preferred Language</label>
                 <p className="text-gray-900">{child.language}</p>
               </div>
+
+              <div>
+                <label className="text-sm font-medium text-gray-700">Education Type</label>
+                <p className="text-gray-900">{child.educationType || "Not specified"}</p>
+              </div>
             </div>
 
             <div className="space-y-4">
               <div>
-                <label className="text-sm font-medium text-gray-700">Location</label>
+                <label className="text-sm font-medium text-gray-700">Current City</label>
                 <div className="flex items-center gap-1">
                   <MapPin className="h-4 w-4 text-gray-500" />
-                  <span className="text-gray-900">{child.state}</span>
-                  {child.district && (
-                    <>
-                      <span className="text-gray-500">, </span>
-                      <span className="text-gray-900">{child.district}</span>
-                    </>
-                  )}
+                  <span className="text-gray-900">{child.currentCity || "Not specified"}</span>
                 </div>
               </div>
 
               <div>
-                <label className="text-sm font-medium text-gray-700">School Level</label>
+                <label className="text-sm font-medium text-gray-700">State</label>
+                <div className="flex items-center gap-1">
+                  <MapPin className="h-4 w-4 text-gray-500" />
+                  <span className="text-gray-900">{child.state}</span>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-sm font-medium text-gray-700">School/College Name</label>
                 <div className="flex items-center gap-2">
                   <GraduationCap className="h-4 w-4 text-gray-500" />
-                  <span className="text-gray-900">{child.schoolLevel || "Not specified"}</span>
+                  <span className="text-gray-900">{child.currentSchoolCollegeName || "Not specified"}</span>
                 </div>
+              </div>
+
+              <div>
+                <label className="text-sm font-medium text-gray-700">Class/Semester</label>
+                <p className="text-gray-900">{child.currentClassSemester || "Not specified"}</p>
               </div>
 
               <div>
@@ -163,25 +218,79 @@ export default function ProfileDetails({ child }: ProfileDetailsProps) {
               </div>
             </div>
           </div>
-          <div className="text-sm text-gray-500">Role: {role}</div>
         </CardContent>
       </Card>
 
-      {/* Background Information */}
+      {/* Contact Information */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Heart className="h-5 w-5" />
-            Background & Family
+            <Phone className="h-5 w-5" />
+            Contact Information
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4">
-            <div>
-              <label className="text-sm font-medium text-gray-700 mb-2 block">Family Background</label>
-              <p className="text-gray-900 bg-gray-50 p-3 rounded-lg">
-                {child.background || "No background information available"}
-              </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-4">
+              <div>
+                <label className="text-sm font-medium text-gray-700">WhatsApp Number</label>
+                <div className="flex items-center gap-2">
+                  <MessageCircle className="h-4 w-4 text-gray-500" />
+                  <span className="text-gray-900">{child.whatsappNumber || "Not provided"}</span>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-sm font-medium text-gray-700">Calling Number</label>
+                <div className="flex items-center gap-2">
+                  <Phone className="h-4 w-4 text-gray-500" />
+                  <span className="text-gray-900">{child.callingNumber || "Not provided"}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="text-sm font-medium text-gray-700">Parent/Guardian Contact</label>
+                <div className="flex items-center gap-2">
+                  <Users className="h-4 w-4 text-gray-500" />
+                  <span className="text-gray-900">{child.parentGuardianContactNumber || "Not provided"}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Family Information */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Users className="h-5 w-5" />
+            Family Information
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-4">
+              <div>
+                <label className="text-sm font-medium text-gray-700">Mother's Name</label>
+                <p className="text-gray-900">{child.mothersName || "Not specified"}</p>
+              </div>
+
+              <div>
+                <label className="text-sm font-medium text-gray-700">Father's Name</label>
+                <p className="text-gray-900">{child.fathersName || "Not specified"}</p>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="text-sm font-medium text-gray-700">Family Background</label>
+                <p className="text-gray-900 bg-gray-50 p-3 rounded-lg">
+                  {child.background || "No background information available"}
+                </p>
+              </div>
             </div>
           </div>
         </CardContent>

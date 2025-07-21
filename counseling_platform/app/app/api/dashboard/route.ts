@@ -40,27 +40,43 @@ export async function GET(request: NextRequest) {
     // Create admin client for database operations
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
     
-    // Fetch assignments for volunteer
+    // Fetch assignments and data based on role
     let assignmentsData: any[] = [];
+    let sessionsData: any[] = [];
+    
     if (role === "VOLUNTEER") {
+      // Fetch assignments for volunteer
       const { data: assign, error: assignError } = await supabaseAdmin
         .from("assignments")
-        .select("*, child(*)")
+        .select("*, children(*)")
         .eq("volunteerId", user.id)
         .eq("isActive", true);
       if (assignError) throw assignError;
       assignmentsData = assign || [];
-    }
 
-    // Fetch recent sessions for volunteer
-    let sessionsData: any[] = [];
-    if (role === "VOLUNTEER") {
+      // Fetch recent sessions for volunteer
       const { data: sessions, error: sessionsError } = await supabaseAdmin
         .from("sessions")
-        .select("*, child(fullName, dateOfBirth), summary(effectiveness)")
+        .select("*, child_id:children(fullName, dateOfBirth)")
         .eq("volunteerId", user.id)
         .order("createdAt", { ascending: false })
         .limit(5);
+      if (sessionsError) throw sessionsError;
+      sessionsData = sessions || [];
+    } else if (role === "ADMIN") {
+      // Admins can see all assignments and sessions
+      const { data: assign, error: assignError } = await supabaseAdmin
+        .from("assignments")
+        .select("*, children(*)")
+        .eq("isActive", true);
+      if (assignError) throw assignError;
+      assignmentsData = assign || [];
+
+      const { data: sessions, error: sessionsError } = await supabaseAdmin
+        .from("sessions")
+        .select("*, child_id:children(fullName, dateOfBirth)")
+        .order("createdAt", { ascending: false })
+        .limit(10);
       if (sessionsError) throw sessionsError;
       sessionsData = sessions || [];
     }

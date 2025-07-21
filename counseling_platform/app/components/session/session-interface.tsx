@@ -10,11 +10,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { SessionSummaryForm } from "./SessionSummaryForm";
 import { 
   PlayCircle, StopCircle, CheckCircle, Clock, 
-  Brain, BookOpen, MessageCircle, AlertTriangle, FileText, Bot, ExternalLink
+  Brain, BookOpen, MessageCircle, AlertTriangle, FileText, Bot, ExternalLink,
+  History, Target, HelpCircle, TrendingUp, MessageSquare, Lightbulb, ArrowRight
 } from "lucide-react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
+import { StoryViewerDialog } from "@/components/knowledge-base/story-viewer-dialog";
+import { format } from "date-fns";
 
 interface SessionInterfaceProps {
   child: any;
@@ -84,6 +87,29 @@ export function SessionInterface({ child, activeSession, userId, userRole }: Ses
       if (response.ok) {
         const data = await response.json();
         setCurrentSession(data.session);
+        
+        // Update roadmap with session ID
+        try {
+          const roadmapResponse = await fetch("/api/ai/enhanced-roadmap", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {})
+            },
+            body: JSON.stringify({
+              child_id: child.id,
+              session_id: data.session.id,
+              action: "update_session"
+            })
+          });
+          
+          if (roadmapResponse.ok) {
+            console.log('Roadmap updated with session ID');
+          }
+        } catch (error) {
+          console.error('Failed to update roadmap with session ID:', error);
+        }
+        
         toast.success("Session started successfully!");
         router.refresh();
       } else {
@@ -277,7 +303,14 @@ export function SessionInterface({ child, activeSession, userId, userRole }: Ses
             <div className="flex items-center gap-4 text-sm text-gray-600">
               <span className="flex items-center gap-1">
                 <Clock className="h-4 w-4" />
-                Started: {currentSession.startedAt ? new Date(currentSession.startedAt).toLocaleString() : "Not started"}
+                Started: {currentSession.startedAt ? new Date(currentSession.startedAt).toLocaleString(undefined, {
+                  year: 'numeric',
+                  month: 'long', 
+                  day: 'numeric',
+                  hour: 'numeric',
+                  minute: '2-digit',
+                  hour12: true
+                }) : "Not started"}
               </span>
               <Badge variant="outline">
                 {currentSession.sessionType}
@@ -287,270 +320,176 @@ export function SessionInterface({ child, activeSession, userId, userRole }: Ses
         )}
       </Card>
 
-      <Tabs defaultValue="roadmap" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="roadmap" className="flex items-center gap-2">
-            <Brain className="h-4 w-4" />
-            Enhanced Roadmap
-          </TabsTrigger>
-          <TabsTrigger value="stories" className="flex items-center gap-2">
-            <BookOpen className="h-4 w-4" />
-            Cultural Stories
-          </TabsTrigger>
-          <TabsTrigger value="summary" className="flex items-center gap-2">
-            <FileText className="h-4 w-4" />
-            Session Summary
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="roadmap">
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle>AI-Enhanced Session Roadmap</CardTitle>
-                {!child || !child.id ? (
-                  <div className="text-sm text-gray-500">Loading child data...</div>
-                ) : (
-                  <Button 
-                    onClick={generateEnhancedRoadmap}
-                    disabled={loadingRoadmap}
-                    className="bg-purple-600 hover:bg-purple-700"
-                  >
-                    {loadingRoadmap ? "Generating..." : "Generate Enhanced Roadmap"}
-                  </Button>
-                )}
-              </div>
-            </CardHeader>
-            <CardContent>
-              {roadmapTimestamp && (
-                <div className="text-xs text-gray-500 mb-2">Last generated: {new Date(roadmapTimestamp).toLocaleString()}</div>
-              )}
-              {aiRoadmap ? (
-                <div className="space-y-6">
-                  {/* Pre-Session Preparation */}
+      {/* AI-Enhanced Session Roadmap - Main Content */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-2">
+              <Brain className="h-5 w-5" />
+              AI-Enhanced Session Roadmap
+            </CardTitle>
+            {!child || !child.id ? (
+              <div className="text-sm text-gray-500">Loading child data...</div>
+            ) : (
+              <Button 
+                onClick={generateEnhancedRoadmap}
+                disabled={loadingRoadmap}
+                className="bg-purple-600 hover:bg-purple-700"
+              >
+                {loadingRoadmap ? "Generating..." : "Generate Enhanced Roadmap"}
+              </Button>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent>
+          {roadmapTimestamp && (
+            <div className="text-xs text-gray-500 mb-4">Last generated: {new Date(roadmapTimestamp).toLocaleString(undefined, {
+              year: 'numeric',
+              month: 'short',
+              day: 'numeric',
+              hour: 'numeric',
+              minute: '2-digit',
+              hour12: true
+            })}</div>
+          )}
+          {aiRoadmap ? (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Left Column - Key Information */}
+              <div className="space-y-4">
+                {/* Session Summary - Most Important */}
+                {aiRoadmap.sessionSummary && (
                   <div className="p-4 bg-blue-50 rounded-lg border-l-4 border-blue-500">
-                    <h4 className="font-medium text-blue-900 mb-2">Pre-Session Preparation</h4>
-                    <p className="text-blue-800 text-sm">{aiRoadmap.preSessionPrep}</p>
+                    <h4 className="font-medium text-blue-900 mb-2 flex items-center gap-2">
+                      <History className="h-4 w-4" />
+                      Previous Session Summary
+                    </h4>
+                    <p className="text-blue-800 text-sm leading-relaxed">{aiRoadmap.sessionSummary}</p>
                   </div>
+                )}
 
-                  {/* Session Objectives */}
-                  <div className="p-4 bg-green-50 rounded-lg border-l-4 border-green-500">
-                    <h4 className="font-medium text-green-900 mb-2">Session Objectives</h4>
+                {/* Active Concerns - Highlighted */}
+                {aiRoadmap.activeConcerns && aiRoadmap.activeConcerns.length > 0 && (
+                  <div className="p-4 bg-red-50 rounded-lg border-l-4 border-red-500">
+                    <h4 className="font-medium text-red-900 mb-2 flex items-center gap-2">
+                      <AlertTriangle className="h-4 w-4" />
+                      Current Active Concerns
+                    </h4>
                     <ul className="space-y-1">
-                      {aiRoadmap.sessionObjectives?.map((objective: string, index: number) => (
-                        <li key={index} className="text-green-800 text-sm flex items-start gap-2">
-                          <CheckCircle className="h-3 w-3 text-green-600 mt-1 shrink-0" />
-                          {objective}
+                      {aiRoadmap.activeConcerns.map((concern: string, index: number) => (
+                        <li key={index} className="text-sm text-red-800 flex items-start gap-2">
+                          <AlertTriangle className="h-3 w-3 text-red-600 mt-1 shrink-0" />
+                          {concern}
                         </li>
                       ))}
                     </ul>
                   </div>
+                )}
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* Warning Signs */}
-                    <div className="p-4 bg-red-50 rounded-lg border-l-4 border-red-500">
-                      <h4 className="font-medium text-red-900 mb-2">Warning Signs to Watch</h4>
-                      <ul className="space-y-1">
-                        {aiRoadmap.warningSigns?.map((sign: string, index: number) => (
-                          <li key={index} className="text-red-800 text-sm flex items-start gap-2">
-                            <AlertTriangle className="h-3 w-3 text-red-600 mt-1 shrink-0" />
-                            {sign}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-
-                    {/* Success Indicators */}
-                    <div className="p-4 bg-purple-50 rounded-lg border-l-4 border-purple-500">
-                      <h4 className="font-medium text-purple-900 mb-2">Success Indicators</h4>
-                      <ul className="space-y-1">
-                        {aiRoadmap.successIndicators?.map((indicator: string, index: number) => (
-                          <li key={index} className="text-purple-800 text-sm flex items-start gap-2">
-                            <CheckCircle className="h-3 w-3 text-purple-600 mt-1 shrink-0" />
-                            {indicator}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
+                {/* Session Focus */}
+                {aiRoadmap.sessionFocus && (
+                  <div className="p-4 bg-green-50 rounded-lg border-l-4 border-green-500">
+                    <h4 className="font-medium text-green-900 mb-2 flex items-center gap-2">
+                      <Target className="h-4 w-4" />
+                      Session Focus
+                    </h4>
+                    <p className="text-green-800 text-sm leading-relaxed">{aiRoadmap.sessionFocus}</p>
                   </div>
+                )}
 
-                  {/* Conversation Starters */}
-                  <div className="p-4 bg-yellow-50 rounded-lg border-l-4 border-yellow-500">
-                    <h4 className="font-medium text-yellow-900 mb-2">Conversation Starters</h4>
+                {/* Recommended Stories */}
+                {aiRoadmap.recommendedStories && aiRoadmap.recommendedStories.length > 0 && (
+                  <div className="p-4 bg-orange-50 rounded-lg border-l-4 border-orange-500">
+                    <h4 className="font-medium text-orange-900 mb-2 flex items-center gap-2">
+                      <BookOpen className="h-4 w-4" />
+                      Recommended Stories
+                    </h4>
                     <div className="space-y-2">
-                      {aiRoadmap.conversationStarters?.map((starter: string, index: number) => (
-                        <div key={index} className="text-yellow-800 text-sm p-2 bg-white rounded border">
-                          "{starter}"
+                      {aiRoadmap.recommendedStories.map((story: any, index: number) => (
+                        <div key={index} className="text-orange-800 text-sm p-2 bg-white rounded border">
+                          <div className="flex items-center gap-2">
+                            <BookOpen className="h-4 w-4 text-orange-600" />
+                            {story.id === "no-stories" ? (
+                              <span className="text-gray-500">{story.title}</span>
+                            ) : (
+                              <StoryViewerDialog story={story}>
+                                <Button variant="ghost" className="p-0 h-auto text-left font-normal text-sm text-gray-700 hover:text-orange-600">
+                                  {story.title}
+                                </Button>
+                              </StoryViewerDialog>
+                            )}
+                          </div>
                         </div>
                       ))}
                     </div>
                   </div>
+                )}
+              </div>
 
-                  {/* Cultural Context & Follow-up Actions */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="p-4 bg-indigo-50 rounded-lg border-l-4 border-indigo-500">
-                      <h4 className="font-medium text-indigo-900 mb-2">Cultural Context</h4>
-                      <p className="text-indigo-800 text-sm">{aiRoadmap.culturalContext}</p>
-                    </div>
-
-                    <div className="p-4 bg-gray-50 rounded-lg border-l-4 border-gray-500">
-                      <h4 className="font-medium text-gray-900 mb-2">Follow-up Actions</h4>
-                      <ul className="space-y-1">
-                        {aiRoadmap.followUpActions?.map((action: string, index: number) => (
-                          <li key={index} className="text-gray-800 text-sm flex items-start gap-2">
-                            <CheckCircle className="h-3 w-3 text-gray-600 mt-1 shrink-0" />
-                            {action}
-                          </li>
-                        ))}
-                      </ul>
+              {/* Right Column - Action Items */}
+              <div className="space-y-4">
+                {/* Key Questions */}
+                {aiRoadmap.keyQuestions && (
+                  <div className="p-4 bg-blue-50 rounded-lg border-l-4 border-blue-500">
+                    <h4 className="font-medium text-blue-900 mb-3 flex items-center gap-2">
+                      <HelpCircle className="h-4 w-4" />
+                      Key Questions to Ask
+                    </h4>
+                    <div className="space-y-2">
+                      {aiRoadmap.keyQuestions.map((question: string, index: number) => (
+                        <div key={index} className="p-3 bg-white rounded border-l-2 border-blue-300">
+                          <p className="text-sm text-blue-800 leading-relaxed">"{question}"</p>
+                        </div>
+                      ))}
                     </div>
                   </div>
+                )}
 
-                  {/* Recommended Stories */}
-                  {aiRoadmap.recommendedStories && aiRoadmap.recommendedStories.length > 0 && (
-                    <div className="p-4 bg-orange-50 rounded-lg border-l-4 border-orange-500">
-                      <h4 className="font-medium text-orange-900 mb-2 flex items-center gap-2">
-                        <BookOpen className="h-4 w-4" />
-                        Recommended Cultural Stories
-                      </h4>
-                      <div className="space-y-2">
-                        {aiRoadmap.recommendedStories.map((storyTitle: string, index: number) => (
-                          <div key={index} className="text-orange-800 text-sm p-2 bg-white rounded border">
-                            📖 {storyTitle}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="text-center py-8 text-gray-500">
-                  <Brain className="h-8 w-8 mx-auto mb-2 text-gray-400" />
-                  <p>Click "Generate Enhanced Roadmap" to get comprehensive session guidance</p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
+                {/* Warning Signs */}
+                {aiRoadmap.warningSigns && (
+                  <div className="p-4 bg-red-50 rounded-lg border-l-4 border-red-500">
+                    <h4 className="font-medium text-red-900 mb-3 flex items-center gap-2">
+                      <AlertTriangle className="h-4 w-4 text-red-500" />
+                      Warning Signs to Watch
+                    </h4>
+                    <ul className="space-y-2">
+                      {aiRoadmap.warningSigns.map((sign: string, index: number) => (
+                        <li key={index} className="text-sm text-red-800 flex items-start gap-2 p-2 bg-white rounded">
+                          <AlertTriangle className="h-3 w-3 text-red-500 mt-1 shrink-0" />
+                          {sign}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
 
-        <TabsContent value="stories">
-          <Card>
-            <CardHeader>
-              <CardTitle>Recommended Cultural Stories</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {recommendedStories.length > 0 ? (
-                <div className="space-y-4">
-                  {recommendedStories.map((story, index) => (
-                    <div key={index} className="p-4 bg-blue-50 rounded-lg border border-blue-200">
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <h4 className="font-medium text-blue-900 mb-1">{story.title}</h4>
-                          <p className="text-sm text-blue-800 mb-2">{story.relevance}</p>
-                          <div className="flex flex-wrap gap-1 mb-2">
-                            {story.themes?.map((theme: string, themeIndex: number) => (
-                              <Badge key={themeIndex} variant="secondary" className="text-xs bg-blue-100 text-blue-800">
-                                {theme}
-                              </Badge>
-                            ))}
-                          </div>
-                        </div>
-                        <Dialog>
-                          <DialogTrigger asChild>
-                            <Button 
-                              size="sm" 
-                              variant="outline"
-                              onClick={() => story.id && loadStoryDetails(story.id)}
-                            >
-                              View Story
-                            </Button>
-                          </DialogTrigger>
-                          <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
-                            <DialogHeader>
-                              <DialogTitle>{selectedStory?.title || story.title}</DialogTitle>
-                            </DialogHeader>
-                            <div className="space-y-4">
-                              <div>
-                                <h4 className="font-medium mb-2">Summary</h4>
-                                <p className="text-sm text-gray-600">{selectedStory?.summary || story.summary}</p>
-                              </div>
-                              {selectedStory?.fullStory && (
-                                <div>
-                                  <h4 className="font-medium mb-2">Full Story</h4>
-                                  <div className="text-sm text-gray-700 space-y-2 max-h-60 overflow-y-auto bg-gray-50 p-3 rounded">
-                                    {selectedStory.fullStory.split('\n').map((paragraph: string, idx: number) => (
-                                      <p key={idx}>{paragraph}</p>
-                                    ))}
-                                  </div>
-                                </div>
-                              )}
-                              <div>
-                                <h4 className="font-medium mb-2">Themes & Lessons</h4>
-                                <div className="flex flex-wrap gap-1">
-                                  {(selectedStory?.themes || story.themes)?.map((theme: string, idx: number) => (
-                                    <Badge key={idx} variant="secondary">{theme}</Badge>
-                                  ))}
-                                </div>
-                              </div>
-                            </div>
-                          </DialogContent>
-                        </Dialog>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center py-8 text-gray-500">
-                  <BookOpen className="h-8 w-8 mx-auto mb-2 text-gray-400" />
-                  <p>Generate a roadmap first to see recommended stories</p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="summary">
-          {currentSession?.status === "IN_PROGRESS" ? (
-            <Card>
-              <CardHeader>
-                <CardTitle>Session Notes</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <Textarea
-                  placeholder="Record quick notes during the session. Use 'End Session' to complete a comprehensive summary..."
-                  value={sessionNotes}
-                  onChange={(e) => setSessionNotes(e.target.value)}
-                  rows={8}
-                />
-                <div className="flex justify-between items-center">
-                  <p className="text-sm text-gray-600">
-                    💡 Quick notes only. Complete the rich summary when ending the session.
-                  </p>
-                  <Button 
-                    onClick={() => toast.success("Notes saved!")}
-                    variant="outline"
-                    size="sm"
-                  >
-                    Save Notes
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
+                {/* Next Steps */}
+                {aiRoadmap.nextSteps && (
+                  <div className="p-4 bg-green-50 rounded-lg border-l-4 border-green-500">
+                    <h4 className="font-medium text-green-900 mb-3 flex items-center gap-2">
+                      <TrendingUp className="h-4 w-4 text-green-500" />
+                      Next Steps for This Session
+                    </h4>
+                    <ul className="space-y-2">
+                      {aiRoadmap.nextSteps.map((step: string, index: number) => (
+                        <li key={index} className="text-sm text-green-800 flex items-start gap-2 p-2 bg-white rounded">
+                          <CheckCircle className="h-3 w-3 text-green-500 mt-1 shrink-0" />
+                          {step}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            </div>
           ) : (
-            <Card>
-              <CardHeader>
-                <CardTitle>Session Summary</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-center py-8 text-gray-500">
-                  <FileText className="h-8 w-8 mx-auto mb-2 text-gray-400" />
-                  <p>Session summary will be available after the session is completed</p>
-                </div>
-              </CardContent>
-            </Card>
+            <div className="text-center py-12 text-gray-500">
+              <Brain className="h-12 w-12 mx-auto mb-4 text-gray-400" />
+              <p className="text-lg mb-2">No roadmap generated yet</p>
+              <p className="text-sm">Click "Generate Enhanced Roadmap" to get AI-powered session recommendations</p>
+            </div>
           )}
-        </TabsContent>
-      </Tabs>
+        </CardContent>
+      </Card>
 
       {/* Rich Session Summary Dialog */}
       {showRichSummary && currentSession && (

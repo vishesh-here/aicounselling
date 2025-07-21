@@ -543,7 +543,14 @@ export default function AiMentorPage() {
                     <div className="mt-2 pt-2 border-t border-gray-100">
                       <div className="text-xs text-gray-500">
                         <p>Click to view full conversation</p>
-                        <p>Last message: {new Date(conversation.lastMessageAt).toLocaleString()}</p>
+                        <p>Last message: {new Date(conversation.lastMessageAt).toLocaleString(undefined, {
+                          year: 'numeric',
+                          month: 'short',
+                          day: 'numeric',
+                          hour: 'numeric',
+                          minute: '2-digit',
+                          hour12: true
+                        })}</p>
                       </div>
                     </div>
                   )}
@@ -684,24 +691,30 @@ export default function AiMentorPage() {
                     <div>
                       <h3 className="font-semibold mb-2">Knowledge Chunks</h3>
                       <div className="bg-gray-50 rounded border">
-                        <table className="min-w-full text-xs">
-                          <thead className="bg-gray-100">
-                            <tr>
-                              <th className="px-2 py-1 text-left">Similarity</th>
-                              <th className="px-2 py-1 text-left">Content</th>
-                              <th className="px-2 py-1 text-left">Chunk ID</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {latestRagContext.knowledgeChunks?.sort((a: any, b: any) => (b.similarity ?? 0) - (a.similarity ?? 0)).map((chunk: any, i: number) => (
-                              <tr key={chunk.id || i} className="border-b border-gray-200">
-                                <td className="px-2 py-1">{chunk.similarity?.toFixed(3) ?? "-"}</td>
-                                <td className="px-2 py-1 max-w-xs truncate" title={chunk.content}>{chunk.content?.slice(0, 100) ?? "-"}</td>
-                                <td className="px-2 py-1">{chunk.id}</td>
+                        {latestRagContext.knowledgeChunks && latestRagContext.knowledgeChunks.length > 0 ? (
+                          <table className="min-w-full text-xs">
+                            <thead className="bg-gray-100">
+                              <tr>
+                                <th className="px-2 py-1 text-left">Similarity</th>
+                                <th className="px-2 py-1 text-left">Content</th>
+                                <th className="px-2 py-1 text-left">Chunk ID</th>
                               </tr>
-                            ))}
-                          </tbody>
-                        </table>
+                            </thead>
+                            <tbody>
+                              {latestRagContext.knowledgeChunks?.sort((a: any, b: any) => (b.similarity ?? 0) - (a.similarity ?? 0)).map((chunk: any, i: number) => (
+                                <tr key={chunk.id || i} className="border-b border-gray-200">
+                                  <td className="px-2 py-1">{chunk.similarity?.toFixed(3) ?? "-"}</td>
+                                  <td className="px-2 py-1 max-w-xs truncate" title={chunk.content}>{chunk.content?.slice(0, 100) ?? "-"}</td>
+                                  <td className="px-2 py-1">{chunk.id}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        ) : (
+                          <div className="p-4 text-gray-500 italic text-center">
+                            No relevant knowledge chunks found for this query. The AI will respond based on its general knowledge.
+                          </div>
+                        )}
                       </div>
                     </div>
                     {/* Child Profile */}
@@ -722,7 +735,27 @@ export default function AiMentorPage() {
                     <div>
                       <h3 className="font-semibold mb-2">Session Summaries</h3>
                       <div className="bg-gray-100 p-2 rounded text-xs overflow-x-auto max-h-40">
-                        <pre className="whitespace-pre-wrap">{JSON.stringify(latestRagContext.sessionSummaries, null, 2)}</pre>
+                        {latestRagContext.sessionSummaries && latestRagContext.sessionSummaries.length > 0 ? (
+                          <pre className="whitespace-pre-wrap">{JSON.stringify(latestRagContext.sessionSummaries, null, 2)}</pre>
+                        ) : (
+                          <div className="text-gray-500 italic">
+                            No session summaries available yet. Session summaries will appear here once sessions are completed and summarized.
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    
+                    {/* Latest Session Roadmap */}
+                    <div>
+                      <h3 className="font-semibold mb-2">Latest Session Roadmap</h3>
+                      <div className="bg-gray-100 p-2 rounded text-xs overflow-x-auto max-h-40">
+                        {latestRagContext.latestSessionRoadmap ? (
+                          <pre className="whitespace-pre-wrap">{JSON.stringify(latestRagContext.latestSessionRoadmap, null, 2)}</pre>
+                        ) : (
+                          <div className="text-gray-500 italic">
+                            No roadmap available for this session.
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>

@@ -480,7 +480,14 @@ export default function AiMentorPage() {
                     <div className="mt-2 pt-2 border-t border-gray-100">
                       <div className="text-xs text-gray-500">
                         <p>Click to view full conversation</p>
-                        <p>Last message: {new Date(conversation.lastMessageAt).toLocaleString()}</p>
+                        <p>Last message: {new Date(conversation.lastMessageAt).toLocaleString(undefined, {
+                          year: 'numeric',
+                          month: 'short',
+                          day: 'numeric',
+                          hour: 'numeric',
+                          minute: '2-digit',
+                          hour12: true
+                        })}</p>
                       </div>
                     </div>
                   )}

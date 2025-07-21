@@ -43,6 +43,35 @@ export async function getRagContext(
     if (childError || !childProfile) {
       throw new Error('Child not found');
     }
+    
+    // Calculate age from dateOfBirth
+    let age = null;
+    if (childProfile.dateOfBirth) {
+      const birthDate = new Date(childProfile.dateOfBirth);
+      const today = new Date();
+      age = today.getFullYear() - birthDate.getFullYear();
+      const monthDiff = today.getMonth() - birthDate.getMonth();
+      if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+        age--;
+      }
+    }
+    
+    // Enhance child profile with calculated fields
+    const enhancedChildProfile = {
+      ...childProfile,
+      name: childProfile.fullName, // Map fullName to name
+      age: age,
+      district: childProfile.currentCity, // Map currentCity to district
+      schoolLevel: childProfile.currentClassSemester // Map currentClassSemester to schoolLevel
+    };
+    
+    console.log('[RAG] Enhanced child profile:', {
+      originalName: childProfile.fullName,
+      mappedName: enhancedChildProfile.name,
+      calculatedAge: enhancedChildProfile.age,
+      district: enhancedChildProfile.district,
+      schoolLevel: enhancedChildProfile.schoolLevel
+    });
     // Fetch active concerns
     const { data: activeConcerns, error: concernsError } = await supabase
       .from('concerns')
@@ -75,17 +104,20 @@ export async function getRagContext(
         if (summariesError) {
           throw new Error('Failed to fetch session summaries: ' + (typeof summariesError === 'object' && summariesError !== null && 'message' in summariesError ? (summariesError as any).message : String(summariesError)));
         }
-        // 3. Filter summaries where new_concerns or resolved_concerns contains any active concern id
-        sessionSummaries = (allSummaries || []).filter((summary: any) => {
-          const newConcerns = Array.isArray(summary.new_concerns) ? summary.new_concerns : [];
-          const resolvedConcerns = Array.isArray(summary.resolved_concerns) ? summary.resolved_concerns : [];
-          return (newConcerns.concat(resolvedConcerns) as string[]).some((cid: string) => concernIds.includes(cid));
+        // 3. Show all session summaries for the child (less restrictive filtering)
+        sessionSummaries = allSummaries || [];
+        console.log('[RAG] Session summaries found:', sessionSummaries.length);
+        sessionSummaries.forEach((summary: any) => {
+          console.log('[RAG] Session summary:', {
+            sessionId: summary.sessionid,
+            summaryLength: summary.summary?.length || 0
+          });
         });
       }
     }
     staticContext = {
       data: {
-        childProfile,
+        childProfile: enhancedChildProfile,
         activeConcerns,
         sessionSummaries
       },
@@ -97,7 +129,19 @@ export async function getRagContext(
   // 2. Generate embedding for the query/context
   const { OpenAI } = await import("openai");
   const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-  const queryText = query || child_id;
+  
+  // Improve query text for better matching
+  let queryText = query || child_id;
+  
+  // If query is too generic, enhance it with context
+  if (!query || query.toLowerCase().includes('summary') || query.toLowerCase().includes('tell me about')) {
+    // Use child's active concerns to create a more specific query
+    const concernTitles = (staticContext.data.activeConcerns || []).map((c: any) => c.title).join(' ');
+    if (concernTitles) {
+      queryText = `${query} ${concernTitles}`;
+      console.log('[RAG] Enhanced query text:', queryText);
+    }
+  }
   let embeddingResponse;
   try {
     embeddingResponse = await openai.embeddings.create({
@@ -114,6 +158,9 @@ export async function getRagContext(
   let ragError;
   try {
     const { supabase: supabaseClient } = await import("@/lib/supabaseClient");
+    console.log('[RAG] Query text:', queryText);
+    console.log('[RAG] Query embedding length:', queryEmbedding.length);
+    
     const rpcRes = await supabaseClient.rpc(
       "match_document_chunks",
       {
@@ -123,6 +170,21 @@ export async function getRagContext(
     );
     ragChunks = rpcRes.data || [];
     ragError = rpcRes.error;
+    
+    console.log('[RAG] Vector search results:', {
+      chunksFound: ragChunks.length,
+      error: ragError,
+      firstChunk: ragChunks[0] ? { 
+        id: ragChunks[0].id, 
+        similarity: ragChunks[0].similarity,
+        content: ragChunks[0].content.substring(0, 100) + '...' 
+      } : null,
+      allChunks: ragChunks.map((chunk: any) => ({
+        id: chunk.id,
+        similarity: chunk.similarity,
+        contentLength: chunk.content.length
+      }))
+    });
   } catch (rpcErr: any) {
     console.warn('Vector search failed, continuing without knowledge chunks:', rpcErr?.message || String(rpcErr));
     ragChunks = [];
@@ -130,6 +192,51 @@ export async function getRagContext(
   if (ragError) {
     console.warn('Supabase RPC returned error, continuing without knowledge chunks:', ragError);
     ragChunks = [];
+  }
+  
+  // Fallback: If no chunks found, get some general knowledge base chunks
+  if (ragChunks.length === 0) {
+    console.log('[RAG] No chunks found, getting fallback knowledge base chunks');
+    try {
+      const { data: fallbackChunks, error: fallbackError } = await supabase
+        .from('document_chunks')
+        .select('id, knowledgeBaseId, content, chunkIndex')
+        .limit(3)
+        .order('chunkIndex', { ascending: true });
+      
+      if (!fallbackError && fallbackChunks && fallbackChunks.length > 0) {
+        ragChunks = fallbackChunks.map((chunk: any) => ({
+          ...chunk,
+          similarity: 0.5 // Default similarity for fallback chunks
+        }));
+        console.log('[RAG] Fallback chunks added:', ragChunks.length);
+      }
+    } catch (fallbackErr) {
+      console.warn('[RAG] Fallback chunk retrieval failed:', fallbackErr);
+    }
+  }
+  
+  // Always ensure we have some knowledge chunks (minimum 2)
+  if (ragChunks.length < 2) {
+    console.log('[RAG] Ensuring minimum knowledge chunks');
+    try {
+      const { data: additionalChunks, error: additionalError } = await supabase
+        .from('document_chunks')
+        .select('id, knowledgeBaseId, content, chunkIndex')
+        .limit(2 - ragChunks.length)
+        .order('chunkIndex', { ascending: true });
+      
+      if (!additionalError && additionalChunks && additionalChunks.length > 0) {
+        const newChunks = additionalChunks.map((chunk: any) => ({
+          ...chunk,
+          similarity: 0.3 // Lower similarity for additional chunks
+        }));
+        ragChunks = [...ragChunks, ...newChunks];
+        console.log('[RAG] Additional chunks added, total:', ragChunks.length);
+      }
+    } catch (additionalErr) {
+      console.warn('[RAG] Additional chunk retrieval failed:', additionalErr);
+    }
   }
 
   // 4. Build and return the unified RAG context
@@ -148,18 +255,38 @@ export async function getRagContext(
         latestSessionRoadmap = typeof roadmapRow.roadmap_content === 'string'
           ? JSON.parse(roadmapRow.roadmap_content)
           : roadmapRow.roadmap_content;
+        console.log('[RAG] Latest roadmap found for session:', sessionId);
       } catch (e) {
+        console.warn('[RAG] Failed to parse roadmap content:', e);
         latestSessionRoadmap = null;
       }
+    } else {
+      console.log('[RAG] No roadmap found for session:', sessionId);
     }
+  } else {
+    console.log('[RAG] No sessionId provided, skipping roadmap fetch');
   }
-  return {
+  const finalContext = {
     knowledgeChunks: ragChunks,
     childProfile: staticContext.data.childProfile,
     activeConcerns: staticContext.data.activeConcerns,
     sessionSummaries: staticContext.data.sessionSummaries,
     latestSessionRoadmap
   };
+  
+  console.log('[RAG] Final context summary:', {
+    knowledgeChunksCount: ragChunks.length,
+    activeConcernsCount: staticContext.data.activeConcerns.length,
+    sessionSummariesCount: staticContext.data.sessionSummaries.length,
+    hasRoadmap: !!latestSessionRoadmap,
+    chunkDetails: ragChunks.slice(0, 2).map((chunk: any) => ({
+      id: chunk.id,
+      similarity: chunk.similarity,
+      contentPreview: chunk.content.substring(0, 50) + '...'
+    }))
+  });
+  
+  return finalContext;
 }
 
 export async function POST(request: NextRequest) {

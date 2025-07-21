@@ -48,10 +48,26 @@ export async function GET(
       .eq("id", id)
       .single();
 
+    console.log("API: Raw database response:", {
+      hasData: !!resource,
+      error: resourceError,
+      columnNames: resource ? Object.keys(resource) : []
+    });
+
     if (resourceError || !resource) {
       console.error("Error fetching knowledge resource:", resourceError);
       return NextResponse.json({ error: "Resource not found" }, { status: 404 });
     }
+
+    console.log("API: Resource fetched:", {
+      id: resource.id,
+      title: resource.title,
+      contentLength: resource.content ? resource.content.length : 0,
+      hasContent: !!resource.content,
+      contentPreview: resource.content ? resource.content.substring(0, 100) : 'NO CONTENT'
+    });
+
+    console.log("API: Full resource object:", JSON.stringify(resource, null, 2));
 
     return NextResponse.json(resource);
 

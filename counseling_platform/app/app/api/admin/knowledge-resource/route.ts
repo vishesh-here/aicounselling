@@ -39,18 +39,33 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Fetch all knowledge base resources
-    const { data: resources, error: resourcesError } = await supabaseAdmin
+    // Get pagination parameters
+    const url = new URL(request.url);
+    const page = parseInt(url.searchParams.get('page') || '1');
+    const limit = parseInt(url.searchParams.get('limit') || '10');
+    const offset = (page - 1) * limit;
+
+    // Fetch paginated knowledge base resources
+    const { data: resources, error: resourcesError, count } = await supabaseAdmin
       .from("knowledge_base")
-      .select("*")
-      .order("createdAt", { ascending: false });
+      .select("*", { count: 'exact' })
+      .order("createdAt", { ascending: false })
+      .range(offset, offset + limit - 1);
 
     if (resourcesError) {
       console.error("Error fetching knowledge resources:", resourcesError);
       return NextResponse.json({ error: resourcesError.message }, { status: 500 });
     }
 
-    return NextResponse.json(resources || []);
+    return NextResponse.json({
+      resources: resources || [],
+      pagination: {
+        page,
+        limit,
+        total: count || 0,
+        totalPages: Math.ceil((count || 0) / limit)
+      }
+    });
 
   } catch (error) {
     console.error("Knowledge resources fetch error:", error);

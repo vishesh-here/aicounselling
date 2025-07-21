@@ -1,21 +1,25 @@
-"use client";
+'use client';
 
-import { useState, useEffect } from "react";
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { 
-  Brain, Lightbulb, BookOpen, Target, Star, 
-  TrendingUp, AlertTriangle, CheckCircle 
-} from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription, DialogClose } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { 
+  BookOpen, Target, AlertTriangle, ArrowRight, 
+  MessageSquare, Lightbulb, Clock, User, Heart, Brain,
+  CheckCircle, Plus
+} from "lucide-react";
+import { StoryViewerDialog } from "@/components/knowledge-base/story-viewer-dialog";
 import { supabase } from "@/lib/supabaseClient";
+import { toast } from 'sonner';
 
 interface PreSessionBriefingProps {
   child: any;
+  onStartSession: () => void;
 }
 
 const CONCERN_CATEGORIES = [
@@ -29,114 +33,87 @@ const CONCERN_CATEGORIES = [
   "FINANCIAL",
 ];
 
-export function PreSessionBriefing({ child }: PreSessionBriefingProps) {
+export function PreSessionBriefing({ child, onStartSession }: PreSessionBriefingProps) {
   const [aiRoadmap, setAiRoadmap] = useState<any>(null);
-  const [roadmapTimestamp, setRoadmapTimestamp] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [roadmapTimestamp, setRoadmapTimestamp] = useState<string | null>(null);
   const [showAddConcern, setShowAddConcern] = useState(false);
   const [newConcern, setNewConcern] = useState({ title: "", description: "", category: "", severity: "LOW" });
   const [savingConcern, setSavingConcern] = useState(false);
   const [concerns, setConcerns] = useState(child.concerns || []);
 
-  const activeConcerns = child.concerns?.filter((c: any) => c.status !== "RESOLVED") || [];
-  const recentSessions = child.sessions?.slice(0, 3) || [];
-
-  const openConcerns = concerns.filter((c: any) => c.status !== "RESOLVED");
+  const activeConcerns = concerns.filter((c: any) => c.status !== "RESOLVED");
   const resolvedConcerns = concerns.filter((c: any) => c.status === "RESOLVED");
 
-  useEffect(() => {
-    const fetchPersistedRoadmap = async () => {
-      try {
-        const params = new URLSearchParams({ child_id: child.id });
-        const response = await fetch(`/api/ai/enhanced-roadmap?${params.toString()}`);
-        if (response.ok) {
-          const data = await response.json();
-          if (data.roadmap) {
-            setAiRoadmap(data.roadmap);
-            setRoadmapTimestamp(data.generated_at || null);
-          }
-        }
-      } catch (err) {}
-    };
-    fetchPersistedRoadmap();
-  }, [child.id]);
-
-  // Generate AI roadmap based on child's profile and concerns
   const generateAiRoadmap = async () => {
-    setLoading(true);
     try {
-      // Get Supabase access token
-      const { data: sessionData } = await supabase.auth.getSession();
-      const accessToken = sessionData?.session?.access_token;
-      const response = await fetch("/api/ai/enhanced-roadmap", {
-        method: "POST",
+      setLoading(true);
+      const { data: { session } } = await supabase.auth.getSession();
+      const accessToken = session?.access_token;
+
+      const response = await fetch('/api/ai/enhanced-roadmap', {
+        method: 'POST',
         headers: {
-          "Content-Type": "application/json",
-          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {})
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          child_id: child.id
+          child_id: child.id,
+          action: 'generate'
         })
       });
 
-      if (response.ok) {
-        const data = await response.json();
-        setAiRoadmap(data.roadmap);
-        setRoadmapTimestamp(data.generated_at || null);
-      } else {
-        console.error("Failed to generate roadmap:", await response.text());
+      if (!response.ok) {
+        throw new Error('Failed to generate roadmap');
       }
+
+      const data = await response.json();
+      setAiRoadmap(data.roadmap);
+      setRoadmapTimestamp(new Date().toISOString());
+      toast.success('Roadmap generated successfully');
     } catch (error) {
-      console.error("Failed to generate AI roadmap:", error);
+      console.error('Error generating roadmap:', error);
+      toast.error('Failed to generate roadmap');
     } finally {
       setLoading(false);
     }
   };
 
-  const getSeverityColor = (severity: string) => {
-    switch (severity) {
-      case "HIGH": return "border-l-red-500 bg-red-50";
-      case "MEDIUM": return "border-l-yellow-500 bg-yellow-50";
-      case "LOW": return "border-l-green-500 bg-green-50";
-      default: return "border-l-gray-500 bg-gray-50";
-    }
-  };
+  const fetchLatestRoadmap = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const accessToken = session?.access_token;
 
-  const getRecommendedStories = () => {
-    // Based on child's concerns and age, recommend relevant cultural stories
-    const storyRecommendations = [
-      {
-        title: "Arjuna's Focus",
-        relevance: "Perfect for academic concerns and building concentration",
-        themes: ["Focus", "Goal-setting", "Excellence"]
-      },
-      {
-        title: "The Clever Rabbit and the Lion",
-        relevance: "Great for building confidence and problem-solving skills",
-        themes: ["Intelligence", "Courage", "Problem-solving"]
-      },
-      {
-        title: "Hanuman's Courage",
-        relevance: "Helps with self-confidence and overcoming obstacles",
-        themes: ["Courage", "Faith", "Self-confidence"]
+      const response = await fetch(`/api/ai/enhanced-roadmap?child_id=${child.id}`, {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.roadmap) {
+          setAiRoadmap(data.roadmap);
+          setRoadmapTimestamp(data.generated_at);
+        }
       }
-    ];
-
-    return storyRecommendations;
+    } catch (error) {
+      console.error('Error fetching roadmap:', error);
+    }
   };
 
   const handleAddConcern = async () => {
     setSavingConcern(true);
     try {
-      // Get Supabase access token
-      const { data: sessionData } = await supabase.auth.getSession();
-      const accessToken = sessionData?.session?.access_token;
-      
+      const { data: { session } } = await supabase.auth.getSession();
+      const accessToken = session?.access_token;
+
       const response = await fetch("/api/concerns", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {})
+          "Authorization": `Bearer ${accessToken}`
         },
         body: JSON.stringify({
           child_id: child.id,
@@ -151,11 +128,14 @@ export function PreSessionBriefing({ child }: PreSessionBriefingProps) {
         setConcerns([...concerns, result.concern]);
         setNewConcern({ title: "", description: "", category: "", severity: "LOW" });
         setShowAddConcern(false);
+        toast.success('Concern added successfully');
       } else {
         console.error("Failed to add concern:", result.error);
+        toast.error('Failed to add concern');
       }
     } catch (error) {
       console.error("Error adding concern:", error);
+      toast.error('Error adding concern');
     } finally {
       setSavingConcern(false);
     }
@@ -163,15 +143,14 @@ export function PreSessionBriefing({ child }: PreSessionBriefingProps) {
 
   const handleResolveConcern = async (concernId: string) => {
     try {
-      // Get Supabase access token
-      const { data: sessionData } = await supabase.auth.getSession();
-      const accessToken = sessionData?.session?.access_token;
+      const { data: { session } } = await supabase.auth.getSession();
+      const accessToken = session?.access_token;
       
       const response = await fetch(`/api/concerns/${concernId}`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
-          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {})
+          "Authorization": `Bearer ${accessToken}`
         },
       });
       const result = await response.json();
@@ -181,13 +160,29 @@ export function PreSessionBriefing({ child }: PreSessionBriefingProps) {
             c.id === concernId ? result.concern : c
           )
         );
+        toast.success('Concern marked as resolved');
       } else {
         console.error("Failed to resolve concern:", result.error);
+        toast.error('Failed to resolve concern');
       }
     } catch (err) {
       console.error("Error resolving concern:", err);
+      toast.error('Error resolving concern');
     }
   };
+
+  const getSeverityColor = (severity: string) => {
+    switch (severity) {
+      case "HIGH": return "border-l-red-500 bg-red-50";
+      case "MEDIUM": return "border-l-yellow-500 bg-yellow-50";
+      case "LOW": return "border-l-green-500 bg-green-50";
+      default: return "border-l-gray-500 bg-gray-50";
+    }
+  };
+
+  useEffect(() => {
+    fetchLatestRoadmap();
+  }, [child.id]);
 
   return (
     <div className="space-y-6">
@@ -211,163 +206,173 @@ export function PreSessionBriefing({ child }: PreSessionBriefingProps) {
         </CardHeader>
         <CardContent>
           {roadmapTimestamp && (
-            <div className="text-xs text-gray-500 mb-2">Last generated: {new Date(roadmapTimestamp).toLocaleString()}</div>
+            <div className="text-xs text-gray-500 mb-2">Last generated: {new Date(roadmapTimestamp).toLocaleString(undefined, {
+                  year: 'numeric',
+                  month: 'short',
+                  day: 'numeric',
+                  hour: 'numeric',
+                  minute: '2-digit',
+                  hour12: true
+                })}</div>
           )}
           {aiRoadmap ? (
-            <div className="space-y-6">
-              {/* Pre-Session Preparation */}
-              {aiRoadmap.preSessionPrep && (
-                <div className="p-4 bg-purple-50 rounded-lg border-l-4 border-purple-500">
-                  <h4 className="font-medium text-purple-900 mb-2 flex items-center gap-2">
-                    <Brain className="h-4 w-4" />
-                    Pre-Session Preparation
-                  </h4>
-                  <p className="text-purple-800 text-sm">{aiRoadmap.preSessionPrep}</p>
-                </div>
-              )}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Left Column - Key Information */}
+              <div className="space-y-4">
+                {/* Session Summary */}
+                {aiRoadmap.sessionSummary && (
+                  <Card className="border-l-4 border-l-blue-500 bg-blue-50">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-lg flex items-center gap-2">
+                        <MessageSquare className="h-5 w-5 text-blue-600" />
+                        Session Summary
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-sm text-blue-800 leading-relaxed">
+                        {aiRoadmap.sessionSummary}
+                      </p>
+                    </CardContent>
+                  </Card>
+                )}
 
-              {/* Session Objectives */}
-              {aiRoadmap.sessionObjectives && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <h4 className="font-medium text-gray-900 mb-2 flex items-center gap-2">
-                      <Target className="h-4 w-4" />
-                      Session Objectives
-                    </h4>
-                    <ul className="space-y-1">
-                      {aiRoadmap.sessionObjectives.map((goal: string, index: number) => (
-                        <li key={index} className="text-sm text-gray-700 flex items-start gap-2">
-                          <CheckCircle className="h-3 w-3 text-green-600 mt-1 shrink-0" />
-                          {goal}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-
-                  {/* Warning Signs */}
-                  {aiRoadmap.warningSigns && (
-                    <div>
-                      <h4 className="font-medium text-gray-900 mb-2 flex items-center gap-2">
-                        <AlertTriangle className="h-4 w-4 text-red-500" />
-                        Warning Signs
-                      </h4>
-                      <ul className="space-y-1">
-                        {aiRoadmap.warningSigns.map((sign: string, index: number) => (
-                          <li key={index} className="text-sm text-gray-700 flex items-start gap-2">
-                            <AlertTriangle className="h-3 w-3 text-red-500 mt-1 shrink-0" />
-                            {sign}
-                          </li>
+                {/* Active Concerns */}
+                {aiRoadmap.activeConcerns && aiRoadmap.activeConcerns.length > 0 && (
+                  <Card className="border-l-4 border-l-red-500 bg-red-50">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-lg flex items-center gap-2">
+                        <AlertTriangle className="h-5 w-5 text-red-600" />
+                        Active Concerns
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-2">
+                        {aiRoadmap.activeConcerns.map((concern: string, index: number) => (
+                          <div key={index} className="flex items-center gap-2 p-2 bg-white rounded">
+                            <span className="text-red-600">•</span>
+                            <span className="text-sm text-red-800">{concern}</span>
+                          </div>
                         ))}
-                      </ul>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Conversation Starters */}
-              {aiRoadmap.conversationStarters && (
-                <div>
-                  <h4 className="font-medium text-gray-900 mb-2 flex items-center gap-2">
-                    <Lightbulb className="h-4 w-4" />
-                    Conversation Starters
-                  </h4>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                    {aiRoadmap.conversationStarters.map((starter: string, index: number) => (
-                      <div key={index} className="p-2 bg-blue-50 rounded border-l-2 border-blue-300">
-                        <p className="text-sm text-blue-800">"{starter}"</p>
                       </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Recommended Approach & Cultural Context */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {aiRoadmap.recommendedApproach && (
-                  <div className="p-4 bg-green-50 rounded-lg">
-                    <h4 className="font-medium text-green-900 mb-2">Recommended Approach</h4>
-                    <p className="text-sm text-green-800">{aiRoadmap.recommendedApproach}</p>
-                  </div>
+                    </CardContent>
+                  </Card>
                 )}
 
-                {aiRoadmap.culturalContext && (
-                  <div className="p-4 bg-orange-50 rounded-lg">
-                    <h4 className="font-medium text-orange-900 mb-2">Cultural Context</h4>
-                    <p className="text-sm text-orange-800">{aiRoadmap.culturalContext}</p>
-                  </div>
+                {/* Session Focus */}
+                {aiRoadmap.sessionFocus && (
+                  <Card className="border-l-4 border-l-green-500 bg-green-50">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-lg flex items-center gap-2">
+                        <Target className="h-5 w-5 text-green-600" />
+                        Session Focus
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-sm text-green-800 leading-relaxed">
+                        {aiRoadmap.sessionFocus}
+                      </p>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Recommended Stories */}
+                {aiRoadmap.recommendedStories && aiRoadmap.recommendedStories.length > 0 && (
+                  <Card className="border-l-4 border-l-orange-500 bg-orange-50">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-lg flex items-center gap-2">
+                        <BookOpen className="h-5 w-5 text-orange-600" />
+                        Recommended Stories
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-2">
+                        {aiRoadmap.recommendedStories.map((story: any, index: number) => (
+                          <div key={index} className="flex items-center gap-2 p-2 bg-white rounded">
+                            <BookOpen className="h-4 w-4 text-orange-600 flex-shrink-0" />
+                            {story.id === "no-stories" ? (
+                              <span className="text-sm text-gray-500">{story.title}</span>
+                            ) : (
+                              <StoryViewerDialog story={story}>
+                                <Button variant="ghost" className="p-0 h-auto text-left font-normal text-sm text-gray-700 hover:text-orange-600">
+                                  {story.title}
+                                </Button>
+                              </StoryViewerDialog>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
                 )}
               </div>
 
-              {/* Expected Challenges */}
-              {aiRoadmap.expectedChallenges && (
-                <div>
-                  <h4 className="font-medium text-gray-900 mb-2 flex items-center gap-2">
-                    <AlertTriangle className="h-4 w-4 text-yellow-500" />
-                    Expected Challenges & Solutions
-                  </h4>
-                  <div className="space-y-2">
-                    {aiRoadmap.expectedChallenges.map((challenge: string, index: number) => (
-                      <div key={index} className="p-3 bg-yellow-50 rounded border-l-2 border-yellow-300">
-                        <p className="text-sm text-yellow-800">{challenge}</p>
+              {/* Right Column - Action Items */}
+              <div className="space-y-4">
+                {/* Key Questions */}
+                {aiRoadmap.keyQuestions && aiRoadmap.keyQuestions.length > 0 && (
+                  <Card className="border-l-4 border-l-blue-500 bg-blue-50">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-lg flex items-center gap-2">
+                        <MessageSquare className="h-5 w-5 text-blue-600" />
+                        Key Questions
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-2">
+                        {aiRoadmap.keyQuestions.map((question: string, index: number) => (
+                          <div key={index} className="p-3 bg-white rounded border-l-2 border-blue-300">
+                            <p className="text-sm text-blue-800 leading-relaxed">"{question}"</p>
+                          </div>
+                        ))}
                       </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Success Indicators & Follow-up Actions */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {aiRoadmap.successIndicators && (
-                  <div>
-                    <h4 className="font-medium text-gray-900 mb-2 flex items-center gap-2">
-                      <CheckCircle className="h-4 w-4 text-green-500" />
-                      Success Indicators
-                    </h4>
-                    <ul className="space-y-1">
-                      {aiRoadmap.successIndicators.map((indicator: string, index: number) => (
-                        <li key={index} className="text-sm text-gray-700 flex items-start gap-2">
-                          <Star className="h-3 w-3 text-green-500 mt-1 shrink-0" />
-                          {indicator}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
+                    </CardContent>
+                  </Card>
                 )}
 
-                {aiRoadmap.followUpActions && (
-                  <div>
-                    <h4 className="font-medium text-gray-900 mb-2 flex items-center gap-2">
-                      <TrendingUp className="h-4 w-4 text-blue-500" />
-                      Follow-up Actions
-                    </h4>
-                    <ul className="space-y-1">
-                      {aiRoadmap.followUpActions.map((action: string, index: number) => (
-                        <li key={index} className="text-sm text-gray-700 flex items-start gap-2">
-                          <CheckCircle className="h-3 w-3 text-blue-500 mt-1 shrink-0" />
-                          {action}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
+                {/* Warning Signs */}
+                {aiRoadmap.warningSigns && aiRoadmap.warningSigns.length > 0 && (
+                  <Card className="border-l-4 border-l-red-500 bg-red-50">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-lg flex items-center gap-2">
+                        <AlertTriangle className="h-5 w-5 text-red-600" />
+                        Warning Signs to Watch For
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-2">
+                        {aiRoadmap.warningSigns.map((sign: string, index: number) => (
+                          <div key={index} className="flex items-center gap-2 p-2 bg-white rounded">
+                            <span className="text-red-600">•</span>
+                            <span className="text-sm text-red-800">{sign}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Next Steps */}
+                {aiRoadmap.nextSteps && aiRoadmap.nextSteps.length > 0 && (
+                  <Card className="border-l-4 border-l-green-500 bg-green-50">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-lg flex items-center gap-2">
+                        <ArrowRight className="h-5 w-5 text-green-600" />
+                        Next Steps
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-2">
+                        {aiRoadmap.nextSteps.map((step: string, index: number) => (
+                          <div key={index} className="flex items-center gap-2 p-2 bg-white rounded">
+                            <span className="text-green-600">•</span>
+                            <span className="text-sm text-green-800">{step}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
                 )}
               </div>
-
-              {/* Recommended Stories */}
-              {aiRoadmap.recommendedStories && aiRoadmap.recommendedStories.length > 0 && (
-                <div className="p-4 bg-orange-50 rounded-lg border-l-4 border-orange-500">
-                  <h4 className="font-medium text-orange-900 mb-2 flex items-center gap-2">
-                    <BookOpen className="h-4 w-4" />
-                    Recommended Cultural Stories
-                  </h4>
-                  <div className="space-y-2">
-                    {aiRoadmap.recommendedStories.map((storyTitle: string, index: number) => (
-                      <div key={index} className="text-orange-800 text-sm p-2 bg-white rounded border">
-                        📖 {storyTitle}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
             </div>
           ) : (
             <div className="text-center py-8 text-gray-500">
@@ -443,9 +448,9 @@ export function PreSessionBriefing({ child }: PreSessionBriefingProps) {
               <TabsTrigger value="resolved">Resolved Concerns</TabsTrigger>
             </TabsList>
             <TabsContent value="open">
-              {openConcerns.length > 0 ? (
+              {activeConcerns.length > 0 ? (
                 <div className="space-y-3">
-                  {openConcerns.map((concern: any) => (
+                  {activeConcerns.map((concern: any) => (
                     <div
                       key={concern.id}
                       className={`p-4 rounded-lg border-l-4 ${getSeverityColor(concern.severity)}`}
@@ -525,6 +530,17 @@ export function PreSessionBriefing({ child }: PreSessionBriefingProps) {
           </Tabs>
         </CardContent>
       </Card>
+
+      {/* Start Session Button */}
+      <div className="flex justify-center pt-4">
+        <Button 
+          onClick={onStartSession}
+          className="bg-orange-600 hover:bg-orange-700 text-white px-8 py-3"
+        >
+          <MessageSquare className="h-4 w-4 mr-2" />
+          Start Session
+        </Button>
+      </div>
     </div>
   );
 }

@@ -270,6 +270,14 @@ async function generateAIResponse(userMessage: string, ragContext: any, conversa
 }
 
 function buildExpertSystemPrompt(ragContext: any): string {
+  console.log('[buildExpertSystemPrompt] RAG context received:', {
+    hasChildProfile: !!ragContext?.childProfile,
+    activeConcernsCount: ragContext?.activeConcerns?.length || 0,
+    sessionSummariesCount: ragContext?.sessionSummaries?.length || 0,
+    knowledgeChunksCount: ragContext?.knowledgeChunks?.length || 0,
+    knowledgeChunks: ragContext?.knowledgeChunks?.slice(0, 2) || []
+  });
+
   if (!ragContext || !ragContext.childProfile) {
     // Fallback or error handling
     return "You are an expert AI mentor. The child profile/context is unavailable. Respond with general guidance.";
@@ -278,6 +286,7 @@ function buildExpertSystemPrompt(ragContext: any): string {
   const concerns = ragContext.activeConcerns || [];
   const sessionSummaries = ragContext.sessionSummaries || [];
   const knowledgeChunks = ragContext.knowledgeChunks || [];
+  const latestRoadmap = ragContext.latestSessionRoadmap || null;
 
   // Serialize child profile
   const childProfileText = `Child Profile:\nName: ${child.name}\nAge: ${child.age}\nGender: ${child.gender}\nState: ${child.state}\nDistrict: ${child.district}\nBackground: ${child.background}\nSchool Level: ${child.schoolLevel}\nInterests: ${(child.interests || []).join(", ")}\nChallenges: ${(child.challenges || []).join(", ")}\nLanguage: ${child.language}`;
@@ -296,8 +305,20 @@ function buildExpertSystemPrompt(ragContext: any): string {
   const knowledgeText = knowledgeChunks.length > 0
     ? knowledgeChunks.slice(0, 3).map((k: any, i: number) => `Knowledge Chunk ${i + 1}: ${k.content}`).join("\n")
     : "No relevant knowledge base chunks found.";
+  
+  // Serialize latest roadmap
+  const roadmapText = latestRoadmap
+    ? `Latest Session Roadmap:\n${JSON.stringify(latestRoadmap, null, 2)}`
+    : "No roadmap available for this session.";
+  
+  console.log('[buildExpertSystemPrompt] Knowledge text generated:', {
+    knowledgeChunksLength: knowledgeChunks.length,
+    knowledgeTextLength: knowledgeText.length,
+    knowledgeTextPreview: knowledgeText.substring(0, 200) + '...',
+    hasRoadmap: !!latestRoadmap
+  });
 
-  return `You are Dr. Priya Sharma, a world-class child psychologist with 20+ years of experience specializing in academic counseling and daily life guidance for children in India.\n\nBelow is the context for the child you are counseling. Use this information to provide highly personalized, empathetic, and actionable advice.\n\n${childProfileText}\n\nActive Concerns:\n${concernsText}\n\nSession Summaries:\n${sessionSummariesText}\n\nRelevant Knowledge Base Chunks:\n${knowledgeText}\n\nAlways reference the child by name and tailor your advice to their background, challenges, and interests. If you need to make recommendations, be specific and culturally sensitive.`;
+  return `You are Dr. Priya Sharma, a world-class child psychologist with 20+ years of experience specializing in academic counseling and daily life guidance for children in India.\n\nBelow is the context for the child you are counseling. Use this information to provide highly personalized, empathetic, and actionable advice.\n\n${childProfileText}\n\nActive Concerns:\n${concernsText}\n\nSession Summaries:\n${sessionSummariesText}\n\nRelevant Knowledge Base Chunks:\n${knowledgeText}\n\n${roadmapText}\n\nAlways reference the child by name and tailor your advice to their background, challenges, and interests. If you need to make recommendations, be specific and culturally sensitive.`;
 }
 
 // Refactored memory storage for Supabase

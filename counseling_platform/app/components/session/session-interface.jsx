@@ -232,7 +232,14 @@ function SessionInterface({ child, activeSession, userId, userRole }) {
             <div className="flex items-center gap-4 text-sm text-gray-600">
               <span className="flex items-center gap-1">
                 <lucide_react_1.Clock className="h-4 w-4"/>
-                Started: {currentSession.startedAt ? new Date(currentSession.startedAt).toLocaleString() : "Not started"}
+                Started: {currentSession.startedAt ? new Date(currentSession.startedAt).toLocaleString(undefined, {
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric',
+                    hour: 'numeric',
+                    minute: '2-digit',
+                    hour12: true
+                  }) : "Not started"}
               </span>
               <badge_1.Badge variant="outline">
                 {currentSession.sessionType}

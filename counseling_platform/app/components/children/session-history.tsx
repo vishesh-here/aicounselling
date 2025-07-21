@@ -113,9 +113,16 @@ export function SessionHistory({ sessions }: SessionHistoryProps) {
                         <div className="space-y-2">
                           <div className="flex items-center text-sm text-gray-600">
                             <Calendar className="h-4 w-4 mr-2" />
-                            <span>{new Date(session.createdAt).toLocaleString()}</span>
+                            <span>{new Date(session.startedAt || session.createdAt).toLocaleString(undefined, {
+                              year: 'numeric',
+                              month: 'long', 
+                              day: 'numeric',
+                              hour: 'numeric',
+                              minute: '2-digit',
+                              hour12: true
+                            })}</span>
                             <span className="mx-2">•</span>
-                            <span>{formatDistanceToNow(new Date(session.createdAt))} ago</span>
+                            <span>{formatDistanceToNow(new Date(session.startedAt || session.createdAt))} ago</span>
                           </div>
 
                           <div className="flex items-center text-sm text-gray-600">

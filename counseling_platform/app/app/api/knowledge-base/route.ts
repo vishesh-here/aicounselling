@@ -38,18 +38,33 @@ export async function GET(request: NextRequest) {
     // Create admin client for database operations
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
     
-    // Fetch knowledge resources
-    const { data, error } = await supabaseAdmin
+    // Get pagination parameters
+    const url = new URL(request.url);
+    const page = parseInt(url.searchParams.get('page') || '1');
+    const limit = parseInt(url.searchParams.get('limit') || '10');
+    const offset = (page - 1) * limit;
+
+    // Fetch paginated knowledge resources
+    const { data, error, count } = await supabaseAdmin
       .from("knowledge_base")
-      .select("*")
-      .order("createdAt", { ascending: false });
+      .select("*", { count: 'exact' })
+      .order("createdAt", { ascending: false })
+      .range(offset, offset + limit - 1);
 
     if (error) {
       console.error('Error fetching knowledge resources:', error);
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json({ resources: data || [] });
+    return NextResponse.json({ 
+      resources: data || [],
+      pagination: {
+        page,
+        limit,
+        total: count || 0,
+        totalPages: Math.ceil((count || 0) / limit)
+      }
+    });
 
   } catch (error) {
     console.error('Error in GET /api/knowledge-base:', error);

@@ -26,7 +26,8 @@ import {
   Loader2,
   Users,
   ToggleLeft,
-  ToggleRight
+  ToggleRight,
+  Gift
 } from 'lucide-react';
 import { toast } from 'sonner';
 import Link from 'next/link';
@@ -109,9 +110,24 @@ export default function ChildrenPage() {
     child: null
   });
   const [deletingChild, setDeletingChild] = useState(false);
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalChildren, setTotalChildren] = useState(0);
+  const [hasNext, setHasNext] = useState(false);
+  const [hasPrev, setHasPrev] = useState(false);
+  const [stats, setStats] = useState({
+    total: 0,
+    assigned: 0,
+    withConcerns: 0,
+    withSessions: 0,
+    birthdaysToday: 0
+  });
 
   useEffect(() => {
-    fetchChildren();
+    fetchChildren(1); // Explicitly pass page 1
+    fetchStats(); // Fetch stats separately
     
     // Handle success messages
     const message = searchParams?.get('message');
@@ -124,7 +140,38 @@ export default function ChildrenPage() {
     }
   }, [searchParams]);
 
-  const fetchChildren = async () => {
+  const fetchStats = async () => {
+    try {
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError || !session) {
+        return;
+      }
+      
+      const accessToken = session.access_token;
+      const response = await fetch('/api/children/stats', {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (response.ok) {
+        const responseData = await response.json();
+        const statsData = responseData.stats;
+        setStats({
+          total: statsData.totalChildren || 0,
+          assigned: statsData.assignedChildren || 0,
+          withConcerns: statsData.withConcerns || 0,
+          withSessions: statsData.withSessions || 0,
+          birthdaysToday: statsData.birthdaysToday || 0
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching stats:', error);
+    }
+  };
+
+  const fetchChildren = async (page = 1) => {
     try {
       setLoading(true);
       
@@ -140,8 +187,19 @@ export default function ChildrenPage() {
       const accessToken = session.access_token;
       console.log('Access token available:', !!accessToken);
       
-      // Fetch all children from API endpoint with auth header
-      const response = await fetch('/api/children', {
+      // Build query parameters for pagination and filtering
+      const params = new URLSearchParams({
+        page: page.toString(),
+        limit: '10', // 10 children per page
+        ...(searchTerm && { search: searchTerm }),
+        ...(stateFilter && stateFilter !== 'All States' && { state: stateFilter }),
+        ...(genderFilter && genderFilter !== 'All' && { gender: genderFilter }),
+        ...(ageFilter && ageFilter !== 'All' && { ageFilter }),
+        ...(showAssignedOnly && { showAssignedOnly: 'true' })
+      });
+      
+      // Fetch paginated children from API endpoint with auth header
+      const response = await fetch(`/api/children?${params}`, {
         headers: {
           'Authorization': `Bearer ${accessToken}`,
           'Content-Type': 'application/json'
@@ -158,24 +216,15 @@ export default function ChildrenPage() {
         throw new Error(responseData.error);
       }
       
-      const allChildren = responseData.children || [];
-      let filtered = allChildren;
-      // Apply filters in client
-      if (searchTerm) filtered = filtered.filter((child: Child) => child.fullName.toLowerCase().includes(searchTerm.toLowerCase()));
-      if (stateFilter && stateFilter !== 'All States') filtered = filtered.filter((child: Child) => child.state === stateFilter);
-      if (genderFilter && genderFilter !== 'All') filtered = filtered.filter((child: Child) => child.gender === genderFilter);
-      if (ageFilter && ageFilter !== 'All') {
-        const [min, max] = ageFilter.split('-');
-        filtered = filtered.filter((child: Child) => {
-          const birthDate = new Date(child.dateOfBirth);
-          const age = new Date().getFullYear() - birthDate.getFullYear();
-          if (min && age < parseInt(min)) return false;
-          if (max && age > parseInt(max)) return false;
-          return true;
-        });
-      }
-      if (showAssignedOnly) filtered = filtered.filter((child: Child) => child.assignments && Array.isArray(child.assignments) && child.assignments.length > 0);
-      setChildren(filtered);
+      const childrenData = responseData.children || [];
+      const paginationData = responseData.pagination || {};
+      
+      setChildren(childrenData);
+      setCurrentPage(paginationData.page || 1);
+      setTotalPages(paginationData.totalPages || 1);
+      setTotalChildren(paginationData.total || 0);
+      setHasNext(paginationData.hasNext || false);
+      setHasPrev(paginationData.hasPrev || false);
     } catch (error) {
       console.error('Error fetching children:', error);
       toast.error('Something went wrong while loading profiles');
@@ -186,11 +235,19 @@ export default function ChildrenPage() {
 
   useEffect(() => {
     const delayedSearch = setTimeout(() => {
-      fetchChildren();
+      setCurrentPage(1); // Reset to first page when filters change
+      fetchChildren(1);
+      fetchStats(); // Refresh stats when filters change
     }, 300); // Debounce search
 
     return () => clearTimeout(delayedSearch);
   }, [searchTerm, stateFilter, genderFilter, ageFilter, showAssignedOnly]);
+
+  // Handle pagination
+  const handlePageChange = (newPage: number) => {
+    setCurrentPage(newPage);
+    fetchChildren(newPage);
+  };
 
   const handleDeleteClick = (child: Child) => {
     setDeleteDialog({
@@ -241,6 +298,27 @@ export default function ChildrenPage() {
     }
   };
 
+  // Check if today is the child's birthday
+  const isBirthdayToday = (dateOfBirth: string) => {
+    if (!dateOfBirth) return false;
+    const today = new Date();
+    const birthDate = new Date(dateOfBirth);
+    return today.getMonth() === birthDate.getMonth() && today.getDate() === birthDate.getDate();
+  };
+
+  // Calculate age from date of birth
+  const calculateAge = (dateOfBirth: string) => {
+    if (!dateOfBirth) return null;
+    const today = new Date();
+    const birthDate = new Date(dateOfBirth);
+    const age = today.getFullYear() - birthDate.getFullYear();
+    const monthDiff = today.getMonth() - birthDate.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+      return age - 1;
+    }
+    return age;
+  };
+
   const filteredChildren = children;
 
   if (loading) {
@@ -282,13 +360,13 @@ export default function ChildrenPage() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
         <Card>
           <CardContent className="p-6">
             <div className="flex items-center space-x-2">
               <Users className="h-5 w-5 text-blue-600" />
               <div>
-                <p className="text-2xl font-bold text-blue-600">{children.length}</p>
+                <p className="text-2xl font-bold text-blue-600">{totalChildren}</p>
                 <p className="text-sm text-gray-600">Total Children</p>
               </div>
             </div>
@@ -301,7 +379,7 @@ export default function ChildrenPage() {
               <Heart className="h-5 w-5 text-green-600" />
               <div>
                 <p className="text-2xl font-bold text-green-600">
-                  {children.filter(c => c.assignments && Array.isArray(c.assignments) && c.assignments.length > 0).length}
+                  {stats.assigned}
                 </p>
                 <p className="text-sm text-gray-600">Assigned</p>
               </div>
@@ -315,7 +393,7 @@ export default function ChildrenPage() {
               <AlertTriangle className="h-5 w-5 text-yellow-600" />
               <div>
                 <p className="text-2xl font-bold text-yellow-600">
-                  {children.filter(c => c.concernRecords && Array.isArray(c.concernRecords) && c.concernRecords.length > 0).length}
+                  {stats.withConcerns}
                 </p>
                 <p className="text-sm text-gray-600">With Concerns</p>
               </div>
@@ -329,9 +407,23 @@ export default function ChildrenPage() {
               <BookOpen className="h-5 w-5 text-purple-600" />
               <div>
                 <p className="text-2xl font-bold text-purple-600">
-                  {children.filter(c => c.sessions && Array.isArray(c.sessions) && c.sessions.length > 0).length}
+                  {stats.withSessions}
                 </p>
                 <p className="text-sm text-gray-600">With Sessions</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center space-x-2">
+              <Gift className="h-5 w-5 text-pink-600" />
+              <div>
+                <p className="text-2xl font-bold text-pink-600">
+                  {stats.birthdaysToday}
+                </p>
+                <p className="text-sm text-gray-600">Birthdays Today</p>
               </div>
             </div>
           </CardContent>
@@ -389,7 +481,7 @@ export default function ChildrenPage() {
                 <SelectItem value="All">All Ages</SelectItem>
                 <SelectItem value="5-10">5-10 years</SelectItem>
                 <SelectItem value="11-15">11-15 years</SelectItem>
-                <SelectItem value="16-18">16-18 years</SelectItem>
+                <SelectItem value="16-20">16-20 years</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -419,17 +511,29 @@ export default function ChildrenPage() {
           </Card>
         ) : (
           children.map((child) => (
-            <Card key={child.id} className="hover:shadow-md transition-shadow">
+            <Card key={child.id} className={`hover:shadow-md transition-shadow ${isBirthdayToday(child.dateOfBirth) ? 'border-pink-200 bg-gradient-to-r from-pink-50 to-purple-50' : ''}`}>
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-3">
-                    <div className="h-12 w-12 bg-blue-100 rounded-full flex items-center justify-center">
-                      <User className="h-6 w-6 text-blue-600" />
+                    <div className={`h-12 w-12 rounded-full flex items-center justify-center ${isBirthdayToday(child.dateOfBirth) ? 'bg-pink-100' : 'bg-blue-100'}`}>
+                      {isBirthdayToday(child.dateOfBirth) ? (
+                        <Gift className="h-6 w-6 text-pink-600" />
+                      ) : (
+                        <User className="h-6 w-6 text-blue-600" />
+                      )}
                     </div>
                     <div>
-                      <CardTitle className="text-lg">{child.fullName}</CardTitle>
+                      <CardTitle className="text-lg flex items-center gap-2">
+                        {child.fullName}
+                        {isBirthdayToday(child.dateOfBirth) && (
+                          <Badge className="bg-pink-100 text-pink-800 border-pink-300">
+                            <Gift className="h-3 w-3 mr-1" />
+                            Birthday!
+                          </Badge>
+                        )}
+                      </CardTitle>
                       <CardDescription className="flex items-center space-x-4">
-                        <span>{new Date().getFullYear() - new Date(child.dateOfBirth).getFullYear()} years old</span>
+                        <span>{calculateAge(child.dateOfBirth) || 'Age not available'} years old</span>
                         <Badge className={getGenderBadgeColor(child.gender)}>
                           {child.gender}
                         </Badge>
@@ -565,6 +669,61 @@ export default function ChildrenPage() {
               </CardContent>
             </Card>
           ))
+        )}
+      </div>
+
+      {/* Pagination Info - Always Show */}
+      <div className="flex items-center justify-between mt-6">
+        <div className="text-sm text-gray-600">
+          Showing {((currentPage - 1) * 10) + 1} to {Math.min(currentPage * 10, totalChildren)} of {totalChildren} children
+        </div>
+        
+        {/* Pagination Controls - Only Show When Multiple Pages */}
+        {totalPages > 1 && (
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handlePageChange(currentPage - 1)}
+              disabled={!hasPrev}
+            >
+              Previous
+            </Button>
+            <div className="flex items-center gap-1">
+              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                let pageNum;
+                if (totalPages <= 5) {
+                  pageNum = i + 1;
+                } else if (currentPage <= 3) {
+                  pageNum = i + 1;
+                } else if (currentPage >= totalPages - 2) {
+                  pageNum = totalPages - 4 + i;
+                } else {
+                  pageNum = currentPage - 2 + i;
+                }
+                
+                return (
+                  <Button
+                    key={pageNum}
+                    variant={currentPage === pageNum ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => handlePageChange(pageNum)}
+                    className="w-8 h-8 p-0"
+                  >
+                    {pageNum}
+                  </Button>
+                );
+              })}
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handlePageChange(currentPage + 1)}
+              disabled={!hasNext}
+            >
+              Next
+            </Button>
+          </div>
         )}
       </div>
 

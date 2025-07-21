@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -45,13 +45,8 @@ export function ViewResourceDialog({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (isOpen && resourceId) {
-      fetchResource();
-    }
-  }, [isOpen, resourceId]);
-
-  const fetchResource = async () => {
+  const fetchResource = useCallback(async () => {
+    console.log("fetchResource function called for ID:", resourceId);
     setLoading(true);
     setError(null);
     
@@ -70,15 +65,20 @@ export function ViewResourceDialog({
         headers["Authorization"] = `Bearer ${accessToken}`;
       }
 
-      const response = await fetch(`/api/admin/knowledge-resource/${resourceId}`, {
+      const response = await fetch(`/api/knowledge-base/${resourceId}`, {
         headers,
       });
 
       if (response.ok) {
         const data = await response.json();
+        console.log("Resource data received:", data); // Debug log
+        console.log("Content field:", data.content); // Debug content specifically
+        console.log("Content length:", data.content ? data.content.length : 0); // Debug content length
+        console.log("Full data object:", JSON.stringify(data, null, 2)); // Debug full object
         setResource(data);
       } else {
         const errorData = await response.json();
+        console.error("API error:", errorData); // Debug log
         setError(errorData.error || "Failed to fetch resource");
       }
     } catch (error) {
@@ -86,7 +86,15 @@ export function ViewResourceDialog({
     } finally {
       setLoading(false);
     }
-  };
+  }, [resourceId]);
+
+  useEffect(() => {
+    console.log("Dialog useEffect triggered:", { isOpen, resourceId });
+    if (isOpen && resourceId) {
+      console.log("Calling fetchResource for:", resourceId);
+      fetchResource();
+    }
+  }, [isOpen, resourceId, fetchResource]);
 
   const getCategoryColor = (category: string) => {
     switch (category) {
@@ -148,6 +156,10 @@ export function ViewResourceDialog({
 
           {resource && !loading && (
             <div className="space-y-6">
+              {/* Debug info - remove this later */}
+              <div className="bg-yellow-100 p-2 rounded text-xs">
+                Debug: Content length = {resource.content ? resource.content.length : 0}
+              </div>
               {/* Header Info */}
               <div className="flex items-start justify-between">
                 <div className="flex-1">
@@ -185,7 +197,36 @@ export function ViewResourceDialog({
                   {resourceType === 'cultural_story' ? 'Full Story' : 'Content'}
                 </h3>
                 <div className="bg-gray-50 p-4 rounded-lg max-h-96 overflow-y-auto">
-                  <pre className="whitespace-pre-wrap text-gray-700 font-sans">{resource.content}</pre>
+                  {resource.content ? (
+                    <div className="whitespace-pre-wrap text-gray-700 font-sans">
+                      <div className="mb-4">
+                        <strong>The Story:</strong>
+                        <div className="mt-2">
+                          {resource.content.replace(/^(cultural_story|knowledge_base)\s*/i, '')}
+                        </div>
+                      </div>
+                      
+                      {resource.themes && resource.themes.length > 0 && (
+                        <div className="mb-4">
+                          <strong>Key Themes:</strong>
+                          <div className="mt-2">
+                            {resource.themes.join(', ')}
+                          </div>
+                        </div>
+                      )}
+                      
+                      {resource.tags && resource.tags.length > 0 && (
+                        <div className="mb-4">
+                          <strong>Applicable For:</strong>
+                          <div className="mt-2">
+                            {resource.tags.join(', ')}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-gray-500 italic">No content available</p>
+                  )}
                 </div>
               </div>
 

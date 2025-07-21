@@ -59,30 +59,14 @@ export async function GET(request: NextRequest) {
     if (!child_id) {
       return NextResponse.json({ error: 'Missing child_id' }, { status: 400 });
     }
-    // Try session-specific roadmap first
-    let query = supabase
+    
+    // Always fetch the latest roadmap for this child (regardless of session_id)
+    let { data, error } = await supabase
       .from('roadmaps')
       .select('*')
       .eq('child_id', child_id)
       .order('generated_at', { ascending: false })
       .limit(1);
-    if (session_id) {
-      query = query.eq('session_id', session_id);
-    }
-    let { data, error } = await query;
-    
-    // If not found, fallback to latest child-level roadmap
-    if ((!data || data.length === 0) && session_id) {
-      const fallback = await supabase
-        .from('roadmaps')
-        .select('*')
-        .eq('child_id', child_id)
-        .is('session_id', null)
-        .order('generated_at', { ascending: false })
-        .limit(1);
-      data = fallback.data;
-      error = fallback.error;
-    }
     
     if (error) {
       console.error('Database error in enhanced-roadmap GET:', error);
@@ -101,7 +85,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       roadmap: parsedRoadmap,
       generated_at: roadmap.generated_at,
-      generated_by: roadmap.generated_by
+      generated_by: roadmap.generated_by,
+      roadmap_id: roadmap.id,
+      session_id: roadmap.session_id
     });
   } catch (error: any) {
     return NextResponse.json({ error: error?.message || 'Unknown error' }, { status: 500 });
@@ -130,15 +116,49 @@ export async function POST(request: NextRequest) {
     
     // Use service role for database operations
     const supabase = getSupabaseWithAuth(request);
-    
+
     const body = await request.json();
-    const { child_id, session_id } = body;
+    const { child_id, session_id, action } = body;
     
-    console.log('Enhanced roadmap POST body:', { child_id, session_id });
+    console.log('Enhanced roadmap POST body:', { child_id, session_id, action });
     
     if (!child_id) {
       console.error('Missing child_id in request body');
       return NextResponse.json({ error: 'Missing child_id' }, { status: 400 });
+    }
+
+    // If action is 'update_session', update existing roadmap with session_id
+    if (action === 'update_session' && session_id) {
+      console.log('Updating existing roadmap with session_id:', session_id);
+      
+      // Find the latest roadmap for this child
+      const { data: existingRoadmap, error: findError } = await supabase
+        .from('roadmaps')
+        .select('*')
+        .eq('child_id', child_id)
+        .order('generated_at', { ascending: false })
+        .limit(1);
+      
+      if (findError || !existingRoadmap || existingRoadmap.length === 0) {
+        return NextResponse.json({ error: 'No roadmap found to update' }, { status: 404 });
+      }
+      
+      // Update the roadmap with session_id
+      const { error: updateError } = await supabase
+        .from('roadmaps')
+        .update({ session_id: session_id })
+        .eq('id', existingRoadmap[0].id);
+      
+      if (updateError) {
+        console.error('Error updating roadmap with session_id:', updateError);
+        return NextResponse.json({ error: updateError.message }, { status: 500 });
+      }
+      
+      return NextResponse.json({
+        success: true,
+        message: 'Roadmap updated with session ID',
+        roadmap_id: existingRoadmap[0].id
+      });
     }
 
     // Fetch comprehensive child data from database
@@ -155,8 +175,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Child not found' }, { status: 404 });
     }
 
-    // Fetch past session summaries
-    console.log('Fetching past session summaries...');
+    // Fetch sessions for this child
     const { data: sessions, error: sessionsError } = await supabase
       .from('sessions')
       .select('id, startedAt, endedAt, status, sessionType')
@@ -166,20 +185,28 @@ export async function POST(request: NextRequest) {
 
     if (sessionsError) {
       console.error('Error fetching sessions:', sessionsError);
+    } else {
+      console.log(`Sessions query for child ${child_id}:`, sessions?.length || 0, 'sessions found');
     }
 
     // Fetch session summaries for each session
     let sessionSummaries = [];
     if (sessions && sessions.length > 0) {
+      console.log(`Found ${sessions.length} sessions for child ${child_id}:`, sessions.map(s => ({ id: s.id, startedAt: s.startedAt })));
+      
       for (const session of sessions) {
         try {
+          console.log(`Fetching summary for session ${session.id}...`);
           const { data: summary, error: summaryError } = await supabase
             .from('session_summaries')
             .select('*')
             .eq('sessionid', session.id)
             .single();
           
-          if (!summaryError && summary) {
+          if (summaryError) {
+            console.error(`Error fetching summary for session ${session.id}:`, summaryError);
+          } else if (summary) {
+            console.log(`Found summary for session ${session.id}:`, summary.summary?.substring(0, 100) + '...');
             sessionSummaries.push({
               sessionId: session.id,
               date: session.startedAt,
@@ -189,162 +216,317 @@ export async function POST(request: NextRequest) {
               new_concerns: summary.new_concerns,
               resolved_concerns: summary.resolved_concerns
             });
+          } else {
+            console.log(`No summary found for session ${session.id}`);
           }
         } catch (error) {
           console.error('Error fetching session summary:', error);
         }
       }
+    } else {
+      console.log(`No sessions found for child ${child_id}`);
     }
+    
+    console.log(`Total session summaries found: ${sessionSummaries.length}`);
 
     // Fetch knowledge base stories/frameworks relevant to child's concerns
-    console.log('Fetching knowledge base stories...');
+    console.log('Fetching knowledge base stories using vector search...');
     let knowledgeBaseStories = [];
     try {
-      // Get child's active concerns
-      const activeConcerns = childData.concerns?.filter((c: any) => c.status !== 'RESOLVED') || [];
+      // Get active concerns to find relevant stories
+      const activeConcerns = childData.concerns?.filter((c: any) => c.status !== "RESOLVED") || [];
       
       if (activeConcerns.length > 0) {
-        // Fetch stories from knowledge base that might be relevant
-        const { data: stories, error: storiesError } = await supabase
-          .from('knowledge_base')
-          .select('*')
-          .or(activeConcerns.map((c: any) => `category.eq.${c.category}`).join(','))
-          .limit(10);
-
-        if (!storiesError && stories) {
-          knowledgeBaseStories = stories;
+        console.log('Active concerns for story matching:', activeConcerns.map((c: any) => `${c.category}: ${c.title}`));
+        
+        // Create a comprehensive semantic query from concerns AND session summaries
+        const concernText = activeConcerns.map((c: any) => `${c.title} ${c.description || ''}`).join(' ');
+        
+        // Include session summaries for richer context
+        const sessionSummaryText = sessionSummaries.length > 0 
+          ? sessionSummaries.map((s: any) => s.summary).join(' ')
+          : '';
+        
+        const queryText = `counseling guidance for child with concerns: ${concernText} ${
+          sessionSummaryText ? `Previous session discussions: ${sessionSummaryText}` : ''
+        }`;
+        
+        console.log('Semantic query for vector search:', queryText.substring(0, 200) + '...');
+        
+        // Generate embedding for the comprehensive query
+        const { OpenAI } = await import("openai");
+        const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+        
+        const embeddingResponse = await openai.embeddings.create({
+          model: "text-embedding-3-small",
+          input: queryText
+        });
+        
+        const embedding = embeddingResponse.data[0].embedding;
+        
+        // Use vector similarity search to find relevant document chunks
+        const { data: relevantChunks, error: vectorError } = await supabase.rpc(
+          'match_document_chunks',
+          {
+            query_embedding: embedding,
+            match_count: 10
+          }
+        );
+        
+        if (vectorError) {
+          console.error('Vector search error:', vectorError);
+        } else if (relevantChunks && relevantChunks.length > 0) {
+          console.log(`Found ${relevantChunks.length} relevant chunks via vector search`);
+          
+          // Debug: Log the structure of the first chunk
+          console.log('First chunk structure:', JSON.stringify(relevantChunks[0], null, 2));
+          
+          // Get unique story IDs from the chunks
+          const storyIds = [...new Set(relevantChunks.map((chunk: any) => chunk.knowledgeBaseId).filter(Boolean))];
+          
+          console.log('Extracted story IDs:', storyIds);
+          
+          if (storyIds.length > 0) {
+            // Fetch the actual story details
+            const { data: stories, error: storiesError } = await supabase
+              .from('knowledge_base')
+              .select('*')
+              .in('id', storyIds)
+              .order('createdAt', { ascending: false });
+            
+            console.log('Database query result:', { stories, storiesError });
+            
+            if (!storiesError && stories) {
+              knowledgeBaseStories = stories;
+              console.log(`Retrieved ${stories.length} stories from vector search results`);
+            } else {
+              console.log('Error fetching stories from database:', storiesError);
+            }
+          } else {
+            console.log('No story IDs found in chunks, checking alternative metadata fields...');
+            // Try alternative metadata field names
+            const alternativeStoryIds = [...new Set(relevantChunks.map((chunk: any) => 
+              chunk.metadata?.knowledge_base_id || 
+              chunk.metadata?.document_id || 
+              chunk.metadata?.id ||
+              chunk.metadata?.story_id
+            ).filter(Boolean))];
+            console.log('Alternative story IDs:', alternativeStoryIds);
+          }
         }
       }
+      
+      // Fallback: If no stories found via vector search, get some general stories
+      if (knowledgeBaseStories.length === 0) {
+        console.log('No stories found via vector search, fetching general stories as fallback');
+        const { data: generalStories, error: generalError } = await supabase
+          .from('knowledge_base')
+          .select('*')
+          .limit(5)
+          .order('createdAt', { ascending: false });
+        
+        if (!generalError && generalStories) {
+          knowledgeBaseStories = generalStories;
+        }
+      }
+      
     } catch (error) {
       console.error('Error fetching knowledge base stories:', error);
     }
 
-    // Build comprehensive context
+    // Build comprehensive context for AI
     const context = `
-COMPREHENSIVE CHILD PROFILE:
-- Full Name: ${childData.fullName}
-- Age: ${childData.dateOfBirth ? Math.floor((new Date().getTime() - new Date(childData.dateOfBirth).getTime()) / (1000 * 60 * 60 * 24 * 365.25)) : 'Unknown'} years old
+CHILD PROFILE:
+- Name: ${childData.fullName}
+- Age: ${childData.age} years
 - Gender: ${childData.gender}
-- Location: ${childData.currentCity}, ${childData.state}
-- Education: ${childData.currentClassSemester} at ${childData.currentSchoolCollegeName}
-- Education Type: ${childData.educationType}
-- Language: ${childData.language}
-- Background: ${childData.background || "No background information"}
-- Interests: ${Array.isArray(childData.interests) ? childData.interests.join(", ") : "None listed"}
-- Family: Mother - ${childData.mothersName || "Not specified"}, Father - ${childData.fathersName || "Not specified"}
-- Contact: ${childData.parentGuardianContactNumber}
+- State: ${childData.state}
+- Background: ${childData.background || 'No background information'}
+- Interests: ${childData.interests?.join(', ') || 'None listed'}
+- Challenges: ${childData.challenges?.join(', ') || 'None listed'}
 
-ACTIVE CONCERNS (requiring immediate attention):
-${childData.concerns?.filter((c: any) => c.status !== 'RESOLVED').map((concern: any) => 
-  `- ${concern.category} (${concern.severity} severity): ${concern.title}
-    Description: ${concern.description}
-    Status: ${concern.status}`
-).join("\n") || "No active concerns"}
+CURRENT ACTIVE CONCERNS:
+${childData.concerns?.filter((c: any) => c.status !== "RESOLVED").map((concern: any) => 
+  `- ${concern.category} (${concern.severity}): ${concern.title} - ${concern.description}`
+).join('\n') || 'No active concerns'}
 
-PAST SESSION HISTORY (${sessionSummaries.length} sessions):
+RESOLVED CONCERNS (for context):
+${childData.concerns?.filter((c: any) => c.status === "RESOLVED").map((concern: any) => 
+  `- ${concern.category}: ${concern.title} - ${concern.description}`
+).join('\n') || 'No resolved concerns'}
+
+RECENT SESSION HISTORY (Last 5 sessions):
 ${sessionSummaries.map((summary: any, index: number) => 
   `Session ${index + 1} (${new Date(summary.date).toLocaleDateString()}):
-  - Summary: ${summary.summary || "No summary available"}
-  - Effectiveness: ${summary.effectiveness || "Not rated"}
-  - Follow-up Notes: ${summary.followup_notes || "None"}
-  - New Concerns Raised: ${summary.new_concerns ? summary.new_concerns.map((c: any) => typeof c === 'object' ? c.title : c).join(", ") : "None"}
-  - Resolved Concerns: ${summary.resolved_concerns ? summary.resolved_concerns.join(", ") : "None"}`
-).join("\n\n") || "No past sessions"}
+  Summary: ${summary.summary}
+  Effectiveness: ${summary.effectiveness}
+  Follow-up Notes: ${summary.followup_notes}
+  New Concerns: ${summary.new_concerns || 'None'}
+  Resolved Concerns: ${summary.resolved_concerns || 'None'}`
+).join('\n\n') || 'No previous sessions'}
 
-RELEVANT KNOWLEDGE BASE STORIES/FRAMEWORKS:
+AVAILABLE KNOWLEDGE BASE STORIES (Use these EXACT titles in recommendedStories):
 ${knowledgeBaseStories.map((story: any) => 
-  `- ${story.title} (${story.category}): ${story.content.substring(0, 200)}...`
-).join("\n") || "No relevant stories found"}
+  `"${story.title}" - ${story.content.substring(0, 150)}...`
+).join('\n') || 'No relevant stories found'}
 
-CULTURAL CONTEXT:
-This child is from ${childData.state}, India. Consider the cultural background, family dynamics, and socio-economic context. The child's preferred language is ${childData.language}. Cultural sensitivity and trauma-informed approaches are essential.
+Based on this comprehensive information, generate a focused, actionable session roadmap.
 `;
 
-    const prompt = `You are an expert child counselor and psychologist specializing in working with underprivileged children in India. You understand trauma-informed care, cultural sensitivity, and age-appropriate counseling techniques.
+    const prompt = `You are an expert child counselor. Generate a concise, practical session roadmap.
 
 ${context}
 
-Generate a comprehensive session roadmap that provides detailed, actionable guidance for a volunteer counselor. Your response MUST be a single valid, minified JSON object, and nothing else. Do not include any text before or after the JSON. Do not use markdown or code blocks. Use these exact keys:
-- preSessionPrep (string)
-- sessionObjectives (array of strings)
-- warningSigns (array of strings)
-- conversationStarters (array of strings)
-- recommendedApproach (string)
-- culturalContext (string)
-- expectedChallenges (array of strings)
-- successIndicators (array of strings)
-- followUpActions (array of strings)
-- recommendedStories (array of strings - suggest specific stories from the knowledge base that would be relevant)
+Create a focused roadmap that directly addresses the child's current situation. Your response MUST be a single valid JSON object with these exact keys:
 
-IMPORTANT INSTRUCTIONS:
-1. Base your recommendations on the child's past session history and progress
-2. Suggest specific stories from the knowledge base that match the child's concerns and cultural background
-3. Consider what worked/didn't work in previous sessions
-4. Address any unresolved concerns from previous sessions
-5. Build upon the child's interests and strengths identified in past sessions
+- sessionSummary (string - brief summary of what was discussed in previous sessions)
+- activeConcerns (array - list the current active concerns that need attention)
+- sessionFocus (string - what should be the main focus of this session)
+- keyQuestions (array of 3-4 specific questions to ask based on concerns)
+- warningSigns (array of 2-3 specific warning signs to watch for)
+- nextSteps (array of 2-3 concrete next steps for this session)
+- recommendedStories (array of story titles to recommend from the knowledge base)
 
-Example:
-{"preSessionPrep":"...","sessionObjectives":["..."],"warningSigns":["..."],"conversationStarters":["..."],"recommendedApproach":"...","culturalContext":"...","expectedChallenges":["..."],"successIndicators":["..."],"followUpActions":["..."],"recommendedStories":["Story Title 1", "Story Title 2"]}
+CRITICAL RULES:
+- Keep everything brief and actionable
+- Directly mention the child's specific concerns by name
+- Reference what was actually discussed in previous sessions
+- Focus on immediate, practical actions
+- Avoid generic advice - be specific to this child's situation
+- For recommendedStories: ONLY use the EXACT titles in quotes from the "AVAILABLE KNOWLEDGE BASE STORIES" section above
+- Do NOT create generic story titles - use the actual titles provided
+- If no stories are available, use ["No stories available in knowledge base"]
 
-Respond with valid, minified JSON only.`;
+Respond with valid JSON only.`;
 
-    // Compose the messages for OpenAI
-    const messages = [
-      { role: "system", content: "You are an expert roadmap generator for child counseling sessions. Use the following context to generate a detailed, actionable session roadmap." },
-      { role: "user", content: `${prompt}\n\nRelevant Knowledge:\n${context}` },
-    ];
+    try {
+      // Use OpenAI instead of Gemini for better reliability
+      const { OpenAI } = await import("openai");
+      const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+      
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "system",
+            content: "You are an expert child counselor. Generate concise, practical session roadmaps in valid JSON format only."
+          },
+          {
+            role: "user",
+            content: prompt
+          }
+        ],
+        temperature: 0.7,
+        max_tokens: 2000
+      });
 
-    // Check if API key is available
-    if (!OPENAI_API_KEY) {
-      console.error('GENERIC_LLM_API_KEY not found, using fallback roadmap');
-      // Return a fallback roadmap
+      const generatedText = completion.choices[0].message.content;
+      
+      if (!generatedText) {
+        throw new Error('No response generated from OpenAI');
+      }
+      
+      // Extract JSON from the response
+      const jsonMatch = generatedText.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        throw new Error('No valid JSON found in response');
+      }
+
+      let roadmapData = JSON.parse(jsonMatch[0]);
+      
+      // Map recommended story titles to full story objects
+      if (roadmapData.recommendedStories && Array.isArray(roadmapData.recommendedStories)) {
+        const storyTitles = roadmapData.recommendedStories;
+        const fullStories = [];
+        
+        for (const title of storyTitles) {
+          // Find the story in our knowledge base
+          const story = knowledgeBaseStories.find((s: any) => s.title === title);
+          if (story) {
+            fullStories.push({
+              id: story.id,
+              title: story.title,
+              summary: story.summary,
+              content: story.content,
+              category: story.category,
+              source: story.source,
+              themes: story.themes,
+              applicableFor: story.applicableFor,
+              moralLesson: story.moralLesson,
+              keyInsights: story.keyInsights,
+              createdAt: story.createdAt,
+              createdBy: story.createdBy
+            });
+          }
+        }
+        
+        roadmapData.recommendedStories = fullStories;
+      }
+
+      // Save roadmap to database
+      const { data: savedRoadmap, error: saveError } = await supabase
+        .from('roadmaps')
+        .upsert({
+          id: crypto.randomUUID(),
+          child_id: child_id,
+          session_id: session_id || null,
+          roadmap_content: roadmapData,
+          generated_by: user?.id || null
+        })
+        .select()
+        .single();
+
+      if (saveError) {
+        console.error('Error saving roadmap:', saveError);
+        return NextResponse.json({ error: 'Failed to save roadmap' }, { status: 500 });
+      }
+
+      return NextResponse.json({ 
+        roadmap: roadmapData,
+        id: savedRoadmap.id 
+      });
+
+    } catch (error) {
+      console.error('Error generating roadmap:', error);
+      
+      // Fallback roadmap with full story data
       const fallbackRoadmap = {
-        preSessionPrep: `Prepare a comfortable, safe environment for ${childData.fullName}. Have age-appropriate activities ready and ensure privacy for the session.`,
-        sessionObjectives: [
-          "Build trust and establish rapport",
-          "Understand current challenges and concerns",
-          "Identify strengths and interests",
-          "Create a supportive action plan"
+        sessionSummary: "No previous sessions found for this child.",
+        activeConcerns: childData.concerns?.filter((c: any) => c.status !== "RESOLVED").map((c: any) => c.title) || ["No active concerns identified"],
+        sessionFocus: "Establish rapport and understand the child's current situation and needs.",
+        keyQuestions: [
+          "How are you feeling today?",
+          "What would you like to talk about?",
+          "Is there anything that's been on your mind lately?"
         ],
         warningSigns: [
-          "Withdrawal or extreme shyness",
-          "Expressions of hopelessness",
-          "Physical symptoms without medical cause",
-          "Sudden behavioral changes"
+          "Withdrawal from activities",
+          "Changes in behavior or mood"
         ],
-        conversationStarters: [
-          "Tell me about your favorite activities or hobbies",
-          "What makes you feel happy or proud?",
-          "Is there anything that's been worrying you lately?",
-          "What would you like to change or improve?"
+        nextSteps: [
+          "Build trust and rapport",
+          "Assess current concerns",
+          "Plan follow-up actions"
         ],
-        recommendedApproach: "Use a warm, empathetic approach with age-appropriate language. Focus on building trust through active listening and validation of feelings.",
-        culturalContext: "Consider the child's cultural background and family dynamics. Respect traditional values while providing modern support approaches.",
-        expectedChallenges: [
-          "Initial shyness or reluctance to open up",
-          "Language barriers if applicable",
-          "Cultural differences in communication styles",
-          "Limited attention span for younger children"
-        ],
-        successIndicators: [
-          "Child shows comfort and willingness to engage",
-          "Open sharing of thoughts and feelings",
-          "Demonstration of understanding and hope",
-          "Willingness to try suggested approaches"
-        ],
-        followUpActions: [
-          "Schedule follow-up session within 1-2 weeks",
-          "Share progress with family if appropriate",
-          "Provide resources and activities for between sessions",
-          "Monitor for any concerning changes"
-        ],
-        recommendedStories: [
-          "Cultural story about resilience and family support",
-          "Story about overcoming academic challenges"
-        ]
+        recommendedStories: knowledgeBaseStories.length > 0 
+          ? knowledgeBaseStories.slice(0, 3).map((story: any) => ({
+        id: story.id,
+        title: story.title,
+        summary: story.summary,
+              content: story.content,
+              category: story.category,
+              source: story.source,
+        themes: story.themes,
+              applicableFor: story.applicableFor,
+              moralLesson: story.moralLesson,
+              keyInsights: story.keyInsights,
+              createdAt: story.createdAt,
+              createdBy: story.createdBy
+            }))
+          : [{ id: "no-stories", title: "No stories available in knowledge base", summary: "No stories found" }]
       };
 
-      // Save fallback roadmap to database
+      // Save fallback roadmap to database (always child-level)
       if (!user?.id) {
         console.error('No authenticated user found for fallback roadmap');
         return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
@@ -353,7 +535,7 @@ Respond with valid, minified JSON only.`;
       const { error: insertError } = await supabase.from('roadmaps').insert({
         id: crypto.randomUUID(),
         child_id,
-        session_id: session_id || null,
+        session_id: null, // Always child-level
         roadmap_content: fallbackRoadmap,
         generated_by: user.id,
         generated_at: new Date().toISOString()
@@ -364,78 +546,14 @@ Respond with valid, minified JSON only.`;
         return NextResponse.json({ error: insertError.message }, { status: 500 });
       }
 
-      return NextResponse.json({
-        success: true,
+    return NextResponse.json({
+      success: true,
         roadmap: fallbackRoadmap,
         generated_at: new Date().toISOString(),
         generated_by: user.id,
         note: "Using fallback roadmap due to missing API key"
       });
     }
-
-    // Call OpenAI API
-    console.log('Calling OpenAI API with model:', OPENAI_MODEL);
-    const openaiRes = await fetch(OPENAI_API_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${OPENAI_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: OPENAI_MODEL,
-        messages,
-        temperature: 0.7,
-        max_tokens: 1024,
-      }),
-    });
-
-    if (!openaiRes.ok) {
-      const error = await openaiRes.text();
-      console.error('OpenAI API error:', error);
-      return NextResponse.json({ error: `OpenAI API error: ${error}` }, { status: 500 });
-    }
-
-    const data = await openaiRes.json();
-    let roadmapContent = data.choices?.[0]?.message?.content || "";
-
-    // Extract JSON object from the response using regex
-    let jsonMatch = roadmapContent.match(/\{[\s\S]*\}/);
-    let jsonString = jsonMatch ? jsonMatch[0] : roadmapContent;
-
-    // Parse and structure the roadmap as JSON
-    let parsedRoadmap = null;
-    try {
-      parsedRoadmap = JSON.parse(jsonString);
-    } catch (e) {
-      return NextResponse.json({ error: 'Failed to parse roadmap as JSON', raw: roadmapContent }, { status: 500 });
-    }
-
-        // Save roadmap to Supabase
-    if (!user?.id) {
-      console.error('No authenticated user found');
-      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
-    }
-    
-    console.log('Saving roadmap with generated_by:', user.id);
-    const { error: insertError } = await supabase.from('roadmaps').insert({
-      id: crypto.randomUUID(), // Generate text ID to match existing schema
-      child_id,
-      session_id: session_id || null,
-      roadmap_content: parsedRoadmap,
-      generated_by: user.id,
-      generated_at: new Date().toISOString()
-    });
-    if (insertError) {
-      console.error('Database error in enhanced-roadmap POST:', insertError);
-      return NextResponse.json({ error: insertError.message }, { status: 500 });
-    }
-
-    return NextResponse.json({
-      success: true,
-      roadmap: parsedRoadmap,
-      generated_at: new Date().toISOString(),
-      generated_by: user.id
-    });
   } catch (error: any) {
     return NextResponse.json({ error: error?.message || 'Unknown error' }, { status: 500 });
   }

@@ -17,6 +17,12 @@ import { formatDistanceToNow } from "date-fns";
 export default function ManageKnowledgeBasePage() {
   const [resources, setResources] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [pagination, setPagination] = useState({
+    page: 1,
+    limit: 10,
+    total: 0,
+    totalPages: 0
+  });
 
   const fetchResources = async () => {
     try {
@@ -34,13 +40,14 @@ export default function ManageKnowledgeBasePage() {
         headers["Authorization"] = `Bearer ${accessToken}`;
       }
 
-      const response = await fetch('/api/admin/knowledge-resource', {
+      const response = await fetch(`/api/admin/knowledge-resource?page=${pagination.page}&limit=${pagination.limit}`, {
         headers,
       });
 
       if (response.ok) {
         const data = await response.json();
-        setResources(data);
+        setResources(data.resources || []);
+        setPagination(data.pagination || pagination);
       } else {
         console.error('Failed to fetch resources');
       }
@@ -53,7 +60,7 @@ export default function ManageKnowledgeBasePage() {
 
   useEffect(() => {
     fetchResources();
-  }, []);
+  }, [pagination.page, pagination.limit]);
 
   if (loading) {
     return (
@@ -114,7 +121,7 @@ export default function ManageKnowledgeBasePage() {
               <div>
                 <p className="text-sm text-gray-600">Total Resources</p>
                 <p className="text-2xl font-bold text-gray-900">
-                  {knowledgeBase.length + culturalStories.length}
+                  {pagination.total}
                 </p>
               </div>
               <BookOpen className="h-8 w-8 text-blue-600" />
@@ -127,7 +134,9 @@ export default function ManageKnowledgeBasePage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-600">Knowledge Base</p>
-                <p className="text-2xl font-bold text-gray-900">{knowledgeBase.length}</p>
+                <p className="text-2xl font-bold text-gray-900">
+                  {pagination.total > 0 ? Math.round((knowledgeBase.length / resources.length) * pagination.total) : 0}
+                </p>
               </div>
               <FileText className="h-8 w-8 text-purple-600" />
             </div>
@@ -139,7 +148,9 @@ export default function ManageKnowledgeBasePage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-600">Cultural Stories</p>
-                <p className="text-2xl font-bold text-gray-900">{culturalStories.length}</p>
+                <p className="text-2xl font-bold text-gray-900">
+                  {pagination.total > 0 ? Math.round((culturalStories.length / resources.length) * pagination.total) : 0}
+                </p>
               </div>
               <Heart className="h-8 w-8 text-orange-600" />
             </div>
@@ -167,10 +178,6 @@ export default function ManageKnowledgeBasePage() {
               <Heart className="h-5 w-5 text-orange-600" />
               Cultural Wisdom Stories ({culturalStories.length})
             </CardTitle>
-            <Button size="sm" className="bg-orange-600 hover:bg-orange-700">
-              <Plus className="h-4 w-4 mr-2" />
-              Add Story
-            </Button>
           </div>
         </CardHeader>
         <CardContent>
@@ -234,10 +241,6 @@ export default function ManageKnowledgeBasePage() {
               <BookOpen className="h-5 w-5 text-blue-600" />
               Knowledge Base Resources ({knowledgeBase.length})
             </CardTitle>
-            <Button size="sm" className="bg-blue-600 hover:bg-blue-700">
-              <Plus className="h-4 w-4 mr-2" />
-              Add Resource
-            </Button>
           </div>
         </CardHeader>
         <CardContent>
@@ -310,33 +313,41 @@ export default function ManageKnowledgeBasePage() {
         </CardContent>
       </Card>
 
-      {/* Quick Actions */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Settings className="h-5 w-5" />
-            Quick Actions
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Button variant="outline" className="h-20 flex-col">
-              <Upload className="h-8 w-8 mb-2" />
-              <span>Bulk Import</span>
-            </Button>
-            
-            <Button variant="outline" className="h-20 flex-col">
-              <FileText className="h-8 w-8 mb-2" />
-              <span>Export Data</span>
-            </Button>
-            
-            <Button variant="outline" className="h-20 flex-col">
-              <Settings className="h-8 w-8 mb-2" />
-              <span>Manage Tags</span>
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+      {/* Pagination */}
+      {pagination.totalPages > 1 && (
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div className="text-sm text-gray-600">
+                Showing {((pagination.page - 1) * pagination.limit) + 1} to {Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total} resources
+              </div>
+              <div className="flex items-center space-x-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPagination(prev => ({ ...prev, page: prev.page - 1 }))}
+                  disabled={pagination.page <= 1}
+                >
+                  Previous
+                </Button>
+                <span className="text-sm text-gray-600">
+                  Page {pagination.page} of {pagination.totalPages}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPagination(prev => ({ ...prev, page: prev.page + 1 }))}
+                  disabled={pagination.page >= pagination.totalPages}
+                >
+                  Next
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+
     </div>
   );
 }

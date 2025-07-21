@@ -21,6 +21,12 @@ export default function KnowledgeBasePage() {
   const [resources, setResources] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [pagination, setPagination] = useState({
+    page: 1,
+    limit: 10,
+    total: 0,
+    totalPages: 0
+  });
 
   useEffect(() => {
     const fetchKnowledgeResources = async () => {
@@ -32,7 +38,7 @@ export default function KnowledgeBasePage() {
         const { data: { session } } = await supabase.auth.getSession();
         const accessToken = session?.access_token;
         
-        const response = await fetch('/api/knowledge-base', {
+        const response = await fetch(`/api/knowledge-base?page=${pagination.page}&limit=${pagination.limit}`, {
           headers: {
             'Authorization': `Bearer ${accessToken}`,
             'Content-Type': 'application/json'
@@ -43,6 +49,7 @@ export default function KnowledgeBasePage() {
         }
         const data = await response.json();
         setResources(data.resources || []);
+        setPagination(data.pagination || pagination);
       } catch (err: any) {
         console.error('Error fetching knowledge resources:', err);
         setError(err.message || 'Failed to load knowledge base');
@@ -53,9 +60,9 @@ export default function KnowledgeBasePage() {
     };
 
     fetchKnowledgeResources();
-  }, []);
-  const knowledgeBase = resources.filter((r: any) => r.category && r.category !== "CULTURAL_WISDOM");
-  const culturalStories = resources.filter((r: any) => r.category === "CULTURAL_WISDOM");
+  }, [pagination.page, pagination.limit]);
+  const knowledgeBase = resources.filter((r: any) => r.type === "knowledge_base");
+  const culturalStories = resources.filter((r: any) => r.type === "cultural_story");
 
   if (loading) {
     return <div className="p-6">Loading knowledge base...</div>;
@@ -102,6 +109,10 @@ export default function KnowledgeBasePage() {
     }
   };
 
+  const handlePageChange = (newPage: number) => {
+    setPagination(prev => ({ ...prev, page: newPage }));
+  };
+
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
@@ -116,7 +127,7 @@ export default function KnowledgeBasePage() {
           <div className="flex items-center space-x-2 text-blue-600">
             <BookOpen className="h-5 w-5" />
             <span className="font-medium">
-              {knowledgeBase.length + culturalStories.length} resources
+              {pagination.total} total resources
             </span>
           </div>
           {userRole === "ADMIN" && (
@@ -164,7 +175,7 @@ export default function KnowledgeBasePage() {
               <div>
                 <p className="text-sm text-gray-600">Total Resources</p>
                 <p className="text-2xl font-bold text-gray-900">
-                  {knowledgeBase.length + culturalStories.length}
+                  {pagination.total}
                 </p>
               </div>
               <BookOpen className="h-8 w-8 text-blue-600" />
@@ -177,7 +188,9 @@ export default function KnowledgeBasePage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-600">Cultural Stories</p>
-                <p className="text-2xl font-bold text-gray-900">{culturalStories.length}</p>
+                <p className="text-2xl font-bold text-gray-900">
+                  {pagination.total > 0 ? Math.round((culturalStories.length / resources.length) * pagination.total) : 0}
+                </p>
               </div>
               <Heart className="h-8 w-8 text-orange-600" />
             </div>
@@ -190,7 +203,7 @@ export default function KnowledgeBasePage() {
               <div>
                 <p className="text-sm text-gray-600">Guidance Materials</p>
                 <p className="text-2xl font-bold text-gray-900">
-                  {knowledgeBase.filter(kb => kb.category === "CAREER_GUIDANCE").length}
+                  {pagination.total > 0 ? Math.round((knowledgeBase.filter(kb => kb.category === "CAREER_GUIDANCE").length / resources.length) * pagination.total) : 0}
                 </p>
               </div>
               <Target className="h-8 w-8 text-purple-600" />
@@ -204,7 +217,7 @@ export default function KnowledgeBasePage() {
               <div>
                 <p className="text-sm text-gray-600">Psychology Resources</p>
                 <p className="text-2xl font-bold text-gray-900">
-                  {knowledgeBase.filter(kb => kb.category === "PSYCHOLOGICAL_COUNSELING").length}
+                  {pagination.total > 0 ? Math.round((knowledgeBase.filter(kb => kb.category === "PSYCHOLOGICAL_COUNSELING").length / resources.length) * pagination.total) : 0}
                 </p>
               </div>
               <Brain className="h-8 w-8 text-green-600" />
@@ -270,6 +283,13 @@ export default function KnowledgeBasePage() {
                     {story.createdBy?.name}
                   </div>
                   <StoryDetailsDialog story={story} />
+                  {/* Debug: Log story data */}
+                  {console.log("Story data being passed to dialog:", {
+                    id: story.id,
+                    title: story.title,
+                    hasContent: !!story.content,
+                    contentLength: story.content ? story.content.length : 0
+                  })}
                 </div>
               </CardContent>
             </Card>
@@ -351,6 +371,13 @@ export default function KnowledgeBasePage() {
                     <span>{resource.createdAt ? formatDistanceToNow(new Date(resource.createdAt)) + ' ago' : 'Recently'}</span>
                   </div>
                   <ResourceDetailsDialog resource={resource} />
+                  {/* Debug: Log resource data */}
+                  {console.log("Resource data being passed to dialog:", {
+                    id: resource.id,
+                    title: resource.title,
+                    hasContent: !!resource.content,
+                    contentLength: resource.content ? resource.content.length : 0
+                  })}
                 </div>
               </CardContent>
             </Card>
@@ -378,6 +405,31 @@ export default function KnowledgeBasePage() {
             )}
           </CardContent>
         </Card>
+      )}
+
+      {/* Pagination Controls */}
+      {pagination.totalPages > 1 && (
+        <div className="flex items-center justify-center gap-2 mt-8">
+          <Button
+            variant="outline"
+            onClick={() => handlePageChange(Math.max(1, pagination.page - 1))}
+            disabled={pagination.page === 1}
+          >
+            Previous
+          </Button>
+          
+          <span className="text-sm text-gray-600">
+            Page {pagination.page} of {pagination.totalPages} ({pagination.total} total)
+          </span>
+          
+          <Button
+            variant="outline"
+            onClick={() => handlePageChange(Math.min(pagination.totalPages, pagination.page + 1))}
+            disabled={pagination.page === pagination.totalPages}
+          >
+            Next
+          </Button>
+        </div>
       )}
     </div>
   );
