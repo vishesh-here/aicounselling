@@ -1,20 +1,30 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
-import { prisma } from "@/lib/db";
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
 export const dynamic = "force-dynamic";
 
-function getSupabaseWithAuth(req: NextRequest) {
+// Helper to get user from authorization header
+async function getUserFromAuthHeader(req: NextRequest) {
   const authHeader = req.headers.get('authorization');
-  let globalHeaders: Record<string, string> = {};
-  if (authHeader) {
-    globalHeaders['Authorization'] = authHeader;
-  } else {
-    const cookieStore = cookies();
-    globalHeaders['Cookie'] = cookieStore.toString();
+  
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return { user: null, error: 'No authorization header' };
   }
-  return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, { global: { headers: globalHeaders } });
+  
+  const accessToken = authHeader.replace('Bearer ', '');
+  
+  // Create client with anon key
+  const client = createClient(supabaseUrl, supabaseAnonKey);
+  
+  // Get user directly using the access token
+  const { data: { user }, error } = await client.auth.getUser(accessToken);
+  
+  return { user, error };
 }
 
 export async function GET(
@@ -22,30 +32,35 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    const supabase = getSupabaseWithAuth(request);
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    // Get user from authorization header
+    const { user, error: userError } = await getUserFromAuthHeader(request);
+    if (userError || !user) {
+      console.error('User error:', userError);
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const story = await prisma.culturalStory.findUnique({
-      where: { 
-        id: params.id,
-        isActive: true 
-      }
-    });
+    const { id } = params;
 
-    if (!story) {
-      return NextResponse.json({ error: "Story not found" }, { status: 404 });
+    // Create admin client for database operations
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
+    
+    // Fetch the story from knowledge_base table
+    const { data: story, error } = await supabaseAdmin
+      .from("knowledge_base")
+      .select("*")
+      .eq("id", id)
+      .eq("isActive", true)
+      .single();
+
+    if (error || !story) {
+      console.error('Error fetching story:', error);
+      return NextResponse.json({ error: 'Story not found' }, { status: 404 });
     }
 
     return NextResponse.json(story);
 
   } catch (error) {
-    console.error("Story fetch error:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
+    console.error('Error in GET /api/stories/[id]:', error);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

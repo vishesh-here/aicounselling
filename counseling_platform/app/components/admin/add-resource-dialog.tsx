@@ -70,7 +70,7 @@ export function AddResourceDialog() {
         type: resourceType === "knowledge" ? "knowledge_base" : "cultural_story",
         category: formData.category
       };
-      if (resourceType === "cultural_story") {
+      if (resourceType === "story") {
         payload.source = formData.source;
       }
       const response = await fetch(endpoint, {

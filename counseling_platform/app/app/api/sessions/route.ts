@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from '@supabase/supabase-js';
+import { createClient, User } from '@supabase/supabase-js';
 import crypto from 'crypto';
 
 export const dynamic = "force-dynamic";
@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
       }
       
       console.log('Using admin user as fallback:', adminUser.id);
-      user = { id: adminUser.id };
+      user = { id: adminUser.id } as unknown as User;
     }
 
     const body = await request.json();
@@ -119,7 +119,7 @@ export async function POST(request: NextRequest) {
           .insert({
             id: sessionId, // Explicitly provide ID
             child_id,
-            volunteerId: user.id, // Now guaranteed to be a valid user ID
+            volunteerId: user!.id, // Now guaranteed to be a valid user ID
             status: 'IN_PROGRESS',
             sessionType,
             startedAt: new Date().toISOString(),

@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient, User } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
 import { NextRequest, NextResponse } from 'next/server';
 import { staticContextCache } from "../../ai/rag-context/route";
@@ -42,7 +42,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
   );
 
   // Authenticate user using the access token
-  let user = null;
+  let user: User | null = null;
   if (accessToken) {
     const { data, error } = await supabase.auth.getUser(accessToken);
     if (error || !data?.user) {
@@ -69,11 +69,15 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
 
 
   // Check if user has access to this child
-  const userRole = user.user_metadata?.role || user.app_metadata?.role;
-  console.log('User access check:', { userId: user.id, userEmail: user.email, userRole, childId: id });
+  if (!user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+  
+  const userRole = user!.user_metadata?.role || user!.app_metadata?.role;
+  console.log('User access check:', { userId: user!.id, userEmail: user!.email, userRole, childId: id });
   
   if (userRole === 'VOLUNTEER') {
-    const assigned = (child.assignments || []).some((a: any) => a.volunteerId === user.id && a.isActive);
+    const assigned = (child.assignments || []).some((a: any) => a.volunteerId === user!.id && a.isActive);
     console.log('Volunteer assignment check:', { assignments: child.assignments, assigned });
     if (!assigned) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });

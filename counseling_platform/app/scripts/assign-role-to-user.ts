@@ -26,12 +26,12 @@ async function assignRoleToUser() {
       return;
     }
     
-    const user = users.users.find(u => u.email.toLowerCase() === USER_EMAIL.toLowerCase());
+    const user = users.users.find(u => u.email?.toLowerCase() === USER_EMAIL.toLowerCase());
     
     if (!user) {
       console.error(`User with email ${USER_EMAIL} not found in Supabase Auth`);
       console.log('Available users:');
-      users.users.forEach(u => console.log(`  - ${u.email} (${u.id})`));
+      users.users.forEach(u => console.log(`  - ${u.email || 'No email'} (${u.id})`));
       return;
     }
     

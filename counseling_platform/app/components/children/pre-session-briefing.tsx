@@ -19,7 +19,6 @@ import { toast } from 'sonner';
 
 interface PreSessionBriefingProps {
   child: any;
-  onStartSession: () => void;
 }
 
 const CONCERN_CATEGORIES = [
@@ -33,7 +32,7 @@ const CONCERN_CATEGORIES = [
   "FINANCIAL",
 ];
 
-export function PreSessionBriefing({ child, onStartSession }: PreSessionBriefingProps) {
+export function PreSessionBriefing({ child }: PreSessionBriefingProps) {
   const [aiRoadmap, setAiRoadmap] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [roadmapTimestamp, setRoadmapTimestamp] = useState<string | null>(null);
@@ -530,17 +529,6 @@ export function PreSessionBriefing({ child, onStartSession }: PreSessionBriefing
           </Tabs>
         </CardContent>
       </Card>
-
-      {/* Start Session Button */}
-      <div className="flex justify-center pt-4">
-        <Button 
-          onClick={onStartSession}
-          className="bg-orange-600 hover:bg-orange-700 text-white px-8 py-3"
-        >
-          <MessageSquare className="h-4 w-4 mr-2" />
-          Start Session
-        </Button>
-      </div>
     </div>
   );
 }

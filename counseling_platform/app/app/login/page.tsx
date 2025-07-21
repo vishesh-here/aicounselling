@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,7 +10,20 @@ import { Heart, Eye, EyeOff, AlertCircle, Users, BookOpen, Sparkles, ArrowRight,
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabaseClient";
 
-export default function LoginPage() {
+function SearchParamsHandler() {
+  const searchParams = useSearchParams();
+
+  useEffect(() => {
+    const message = searchParams?.get('message');
+    if (message === 'signup-success') {
+      toast.success('Registration submitted successfully! Your application is pending admin approval.');
+    }
+  }, [searchParams]);
+
+  return null;
+}
+
+function LoginPageContent() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -20,13 +33,6 @@ export default function LoginPage() {
   const searchParams = useSearchParams();
 
   const callbackUrl = searchParams?.get('callbackUrl');
-
-  useEffect(() => {
-    const message = searchParams?.get('message');
-    if (message === 'signup-success') {
-      toast.success('Registration submitted successfully! Your application is pending admin approval.');
-    }
-  }, [searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -248,5 +254,14 @@ export default function LoginPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <SearchParamsHandler />
+      <LoginPageContent />
+    </Suspense>
   );
 }

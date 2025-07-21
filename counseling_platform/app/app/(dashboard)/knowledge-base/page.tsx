@@ -283,13 +283,6 @@ export default function KnowledgeBasePage() {
                     {story.createdBy?.name}
                   </div>
                   <StoryDetailsDialog story={story} />
-                  {/* Debug: Log story data */}
-                  {console.log("Story data being passed to dialog:", {
-                    id: story.id,
-                    title: story.title,
-                    hasContent: !!story.content,
-                    contentLength: story.content ? story.content.length : 0
-                  })}
                 </div>
               </CardContent>
             </Card>
@@ -371,13 +364,6 @@ export default function KnowledgeBasePage() {
                     <span>{resource.createdAt ? formatDistanceToNow(new Date(resource.createdAt)) + ' ago' : 'Recently'}</span>
                   </div>
                   <ResourceDetailsDialog resource={resource} />
-                  {/* Debug: Log resource data */}
-                  {console.log("Resource data being passed to dialog:", {
-                    id: resource.id,
-                    title: resource.title,
-                    hasContent: !!resource.content,
-                    contentLength: resource.content ? resource.content.length : 0
-                  })}
                 </div>
               </CardContent>
             </Card>

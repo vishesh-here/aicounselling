@@ -1,6 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { prisma } from "@/lib/db";
 import { createClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
 import { staticContextCache } from "../../ai/rag-context/route";
